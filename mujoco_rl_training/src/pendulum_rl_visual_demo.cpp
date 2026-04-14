@@ -25,10 +25,8 @@ int main() {
     mujoco_rl_training::PendulumEnv env(config);
     auto observation = env.reset();
 
-    std::cout << "Initial observation: ["
-              << observation[0] << ", "
-              << observation[1] << ", "
-              << observation[2] << "]\n";
+    std::cout << "Initial observation: [" << observation[0] << ", " << observation[1] << ", " << observation[2]
+              << "]\n";
 
     auto& sim_core = env.sim_core();
     std::atomic<bool> paused{false};
@@ -47,33 +45,46 @@ int main() {
     std::mt19937 rng(123);
     std::uniform_real_distribution<double> action_dist(-config.max_torque, config.max_torque);
 
-    const auto frame_period =
+    std::atomic<bool> run_simulation{true};
+    const auto simulation_period =
         std::chrono::duration<double>(1.0 / static_cast<double>(config.simulation_frequency));
+    const auto render_period = std::chrono::duration<double>(1.0 / 60.0);
 
-    for (int step = 0; !viewer.should_close(); ++step) {
-        const auto frame_start = std::chrono::steady_clock::now();
+    std::thread simulation_thread([&]() {
+        using clock_type = std::chrono::steady_clock;
+        auto next_tick = clock_type::now();
 
-        if (reset_requested.exchange(false, std::memory_order_acq_rel)) {
-            observation = env.reset();
-            std::cout << "Reset observation: ["
-                      << observation[0] << ", "
-                      << observation[1] << ", "
-                      << observation[2] << "]\n";
-        }
+        while (run_simulation.load(std::memory_order_acquire)) {
+            next_tick += std::chrono::duration_cast<clock_type::duration>(simulation_period);
 
-        if (!paused.load(std::memory_order_acquire)) {
-            const double action = action_dist(rng);
-            const auto result = env.step(action);
-            observation = result.observation;
-
-            if (result.terminated || result.truncated) {
+            if (reset_requested.exchange(false, std::memory_order_acq_rel)) {
                 observation = env.reset();
-                std::cout << "Episode reset observation: ["
-                          << observation[0] << ", "
-                          << observation[1] << ", "
+                std::cout << "Reset observation: [" << observation[0] << ", " << observation[1] << ", "
                           << observation[2] << "]\n";
             }
+
+            if (!paused.load(std::memory_order_acquire)) {
+                const double action = action_dist(rng);
+                const auto result = env.step(action);
+                observation = result.observation;
+
+                if (result.terminated || result.truncated) {
+                    observation = env.reset();
+                    std::cout << "Episode reset observation: [" << observation[0] << ", " << observation[1] << ", "
+                              << observation[2] << "]\n";
+                }
+            }
+
+            std::this_thread::sleep_until(next_tick);
+            const auto now = clock_type::now();
+            if (now > next_tick + std::chrono::duration_cast<clock_type::duration>(simulation_period)) {
+                next_tick = now;
+            }
         }
+    });
+
+    while (!viewer.should_close()) {
+        const auto frame_start = std::chrono::steady_clock::now();
 
         {
             std::lock_guard<std::recursive_mutex> lock(sim_core.state_mutex());
@@ -83,8 +94,11 @@ int main() {
         viewer.update_scene(*render_data);
         viewer.present();
 
-        std::this_thread::sleep_until(frame_start + frame_period);
+        std::this_thread::sleep_until(frame_start + render_period);
     }
+
+    run_simulation.store(false, std::memory_order_release);
+    simulation_thread.join();
 
     return EXIT_SUCCESS;
 }

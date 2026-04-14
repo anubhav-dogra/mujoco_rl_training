@@ -49,8 +49,8 @@ PendulumEnv::PendulumEnv(const PendulumEnvConfig& config) : config_(config), sim
 PendulumEnv::~PendulumEnv() = default;
 
 std::array<double, 3> PendulumEnv::reset() {
-    std::uniform_real_distribution<double> theta_dist(-0.1, 0.1);
-    std::uniform_real_distribution<double> theta_dot_dist(-0.1, 0.1);
+    std::uniform_real_distribution<double> theta_dist(-1, 1);
+    std::uniform_real_distribution<double> theta_dot_dist(-1, 1);
 
     {
         std::lock_guard<std::recursive_mutex> lock(sim_core_->state_mutex());
@@ -99,13 +99,9 @@ std::array<double, 3> PendulumEnv::observation() const {
     return {std::cos(theta), std::sin(theta), theta_dot};
 }
 
-MujocoSimCore& PendulumEnv::sim_core() {
-    return *sim_core_;
-}
+MujocoSimCore& PendulumEnv::sim_core() { return *sim_core_; }
 
-const MujocoSimCore& PendulumEnv::sim_core() const {
-    return *sim_core_;
-}
+const MujocoSimCore& PendulumEnv::sim_core() const { return *sim_core_; }
 
 double PendulumEnv::normalize_angle(double angle) const {
     while (angle > kPi) {
