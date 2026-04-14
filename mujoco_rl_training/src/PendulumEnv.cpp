@@ -75,7 +75,9 @@ PendulumStepResult PendulumEnv::step(double action) {
     {
         std::lock_guard<std::recursive_mutex> lock(sim_core_->state_mutex());
         sim_core_->set_effort_command(control_index_, clipped_action);
-        sim_core_->step();
+        for (int i = 0; i < config_.repeat_action; ++i) {
+            sim_core_->step();
+        }
         theta = sim_core_->data()->qpos[qpos_index_];
         theta_dot = sim_core_->data()->qvel[qvel_index_];
     }
@@ -84,8 +86,8 @@ PendulumStepResult PendulumEnv::step(double action) {
 
     PendulumStepResult result;
     result.observation = {std::cos(theta), std::sin(theta), theta_dot};
-    result.reward =
-        -(theta_normalized * theta_normalized + 0.1 * theta_dot * theta_dot + 0.001 * clipped_action * clipped_action);
+    result.reward = -((theta_normalized * theta_normalized) + (0.1 * theta_dot * theta_dot) +
+                      (0.001 * clipped_action * clipped_action));
     ++step_count_;
     result.terminated = false;
     result.truncated = step_count_ >= config_.episode_horizon;
@@ -93,8 +95,14 @@ PendulumStepResult PendulumEnv::step(double action) {
 }
 
 std::array<double, 3> PendulumEnv::observation() const {
-    const double theta = current_theta();
-    const double theta_dot = current_theta_dot();
+    double theta = 0.0;
+    double theta_dot = 0.0;
+
+    {
+        std::lock_guard<std::recursive_mutex> lock(sim_core_->state_mutex());
+        theta = sim_core_->data()->qpos[qpos_index_];
+        theta_dot = sim_core_->data()->qvel[qvel_index_];
+    }
 
     return {std::cos(theta), std::sin(theta), theta_dot};
 }

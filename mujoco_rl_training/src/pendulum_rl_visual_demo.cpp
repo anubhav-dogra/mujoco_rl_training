@@ -19,8 +19,9 @@ int main() {
     config.xml_path = ament_index_cpp::get_package_share_directory("mujoco_models") + "/models/pendulum/pendulum.xml";
     config.simulation_frequency = 1000;
     config.max_torque = 20.0;
-    config.episode_horizon = 2000;
+    config.episode_horizon = 200;
     config.seed = 0;
+    config.repeat_action = 20;
 
     mujoco_rl_training::PendulumEnv env(config);
     auto observation = env.reset();
@@ -46,8 +47,9 @@ int main() {
     std::uniform_real_distribution<double> action_dist(-config.max_torque, config.max_torque);
 
     std::atomic<bool> run_simulation{true};
-    const auto simulation_period =
-        std::chrono::duration<double>(1.0 / static_cast<double>(config.simulation_frequency));
+    const auto env_step_period =
+        std::chrono::duration<double>(static_cast<double>(config.repeat_action) /
+                                      static_cast<double>(config.simulation_frequency));
     const auto render_period = std::chrono::duration<double>(1.0 / 60.0);
 
     std::thread simulation_thread([&]() {
@@ -55,7 +57,7 @@ int main() {
         auto next_tick = clock_type::now();
 
         while (run_simulation.load(std::memory_order_acquire)) {
-            next_tick += std::chrono::duration_cast<clock_type::duration>(simulation_period);
+            next_tick += std::chrono::duration_cast<clock_type::duration>(env_step_period);
 
             if (reset_requested.exchange(false, std::memory_order_acq_rel)) {
                 observation = env.reset();
@@ -77,7 +79,7 @@ int main() {
 
             std::this_thread::sleep_until(next_tick);
             const auto now = clock_type::now();
-            if (now > next_tick + std::chrono::duration_cast<clock_type::duration>(simulation_period)) {
+            if (now > next_tick + std::chrono::duration_cast<clock_type::duration>(env_step_period)) {
                 next_tick = now;
             }
         }

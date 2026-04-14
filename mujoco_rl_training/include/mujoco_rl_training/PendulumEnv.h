@@ -16,6 +16,7 @@ struct PendulumEnvConfig {
     double max_torque = 20.0;
     int episode_horizon = 1000;
     unsigned int seed = 0;
+    int repeat_action = 20;
 };
 struct PendulumStepResult {
     std::array<double, 3> observation{};

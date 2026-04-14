@@ -14,13 +14,12 @@ int main() {
     config.max_torque = 20.0;
     config.episode_horizon = 200;
     config.seed = 0;
+    config.repeat_action = 20;
 
     mujoco_rl_training::PendulumEnv env(config);
     const auto initial_observation = env.reset();
 
-    std::cout << "Initial observation: ["
-              << initial_observation[0] << ", "
-              << initial_observation[1] << ", "
+    std::cout << "Initial observation: [" << initial_observation[0] << ", " << initial_observation[1] << ", "
               << initial_observation[2] << "]\n";
 
     std::mt19937 rng(123);
@@ -30,14 +29,9 @@ int main() {
         const double action = action_dist(rng);
         const auto result = env.step(action);
 
-        std::cout << "step=" << step
-                  << " action=" << action
-                  << " reward=" << result.reward
-                  << " obs=[" << result.observation[0] << ", "
-                  << result.observation[1] << ", "
-                  << result.observation[2] << "]"
-                  << " truncated=" << (result.truncated ? "true" : "false")
-                  << "\n";
+        std::cout << "step=" << step << " action=" << action << " reward=" << result.reward << " obs=["
+                  << result.observation[0] << ", " << result.observation[1] << ", " << result.observation[2] << "]"
+                  << " truncated=" << (result.truncated ? "true" : "false") << "\n";
 
         if (result.terminated || result.truncated) {
             break;
