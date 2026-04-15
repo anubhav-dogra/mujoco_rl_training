@@ -17,6 +17,8 @@ struct PendulumEnvConfig {
     int episode_horizon = 1000;
     unsigned int seed = 0;
     int repeat_action = 20;
+    double reset_angle_range = 0.35;
+    double reset_velocity_range = 0.5;
 };
 struct PendulumStepResult {
     std::array<double, 3> observation{};

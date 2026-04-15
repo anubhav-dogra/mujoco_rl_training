@@ -27,7 +27,7 @@ if(NOT EXISTS "${MUJOCO_PATH}/include/mujoco/mujoco.h")
 endif()
 
 add_library(mujoco_rl_training SHARED
-  src/PendulumEnv.cpp
+  src/PendulumEnv.cpp src/PendulumLinearPolicy.cpp
 )
 
 target_include_directories(mujoco_rl_training PUBLIC
@@ -53,6 +53,12 @@ add_executable(pendulum_rl_visual_demo
   src/pendulum_rl_visual_demo.cpp
 )
 
+add_executable(pendulum_random_search src/pendulum_random_search.cpp)
+
+add_executable(pendulum_policy_rollout
+  src/pendulum_policy_rollout.cpp
+)
+
 target_include_directories(pendulum_rl_demo PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
   $<BUILD_INTERFACE:${MUJOCO_PATH}/include/mujoco>
@@ -66,6 +72,16 @@ target_link_libraries(pendulum_rl_demo
 )
 
 ament_target_dependencies(pendulum_rl_demo
+  ament_index_cpp
+  mujoco_core
+)
+
+target_link_libraries(pendulum_random_search
+  mujoco_rl_training
+  mujoco_core::mujoco_core
+)
+
+ament_target_dependencies(pendulum_random_search
   ament_index_cpp
   mujoco_core
 )
@@ -89,6 +105,25 @@ ament_target_dependencies(pendulum_rl_visual_demo
   mujoco_viewer
 )
 
+target_include_directories(pendulum_policy_rollout PUBLIC
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+  $<BUILD_INTERFACE:${MUJOCO_PATH}/include/mujoco>
+  $<BUILD_INTERFACE:${MUJOCO_PATH}/include>
+  $<INSTALL_INTERFACE:include>
+)
+
+target_link_libraries(pendulum_policy_rollout
+  mujoco_rl_training
+  mujoco_viewer::mujoco_viewer
+  mujoco_core::mujoco_core
+)
+
+ament_target_dependencies(pendulum_policy_rollout
+  ament_index_cpp
+  mujoco_core
+  mujoco_viewer
+)
+
 install(
   TARGETS mujoco_rl_training
   LIBRARY DESTINATION lib
@@ -99,6 +134,8 @@ install(
 install(
   TARGETS pendulum_rl_demo
           pendulum_rl_visual_demo
+          pendulum_random_search
+          pendulum_policy_rollout
   RUNTIME DESTINATION lib/${PROJECT_NAME}
 )
 

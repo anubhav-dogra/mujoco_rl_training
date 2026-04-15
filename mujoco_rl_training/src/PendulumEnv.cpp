@@ -49,8 +49,8 @@ PendulumEnv::PendulumEnv(const PendulumEnvConfig& config) : config_(config), sim
 PendulumEnv::~PendulumEnv() = default;
 
 std::array<double, 3> PendulumEnv::reset() {
-    std::uniform_real_distribution<double> theta_dist(-1, 1);
-    std::uniform_real_distribution<double> theta_dot_dist(-1, 1);
+    std::uniform_real_distribution<double> theta_dist(-config_.reset_angle_range, config_.reset_angle_range);
+    std::uniform_real_distribution<double> theta_dot_dist(-config_.reset_velocity_range, config_.reset_velocity_range);
 
     {
         std::lock_guard<std::recursive_mutex> lock(sim_core_->state_mutex());
