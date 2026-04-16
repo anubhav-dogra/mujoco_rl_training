@@ -15,29 +15,54 @@
 #include <mutex>
 #include <stdexcept>
 #include <thread>
+#include <vector>
 
 namespace {
 
-const char* kPolicyArtifactPath = "artifacts/pendulum_best_policy.txt";
+const char* kDefaultPolicyArtifactPath = "artifacts/pendulum_best_policy.txt";
 
-mujoco_rl_training::PendulumLinearPolicy load_policy() {
-    std::ifstream input(kPolicyArtifactPath);
-    if (!input.is_open()) {
-        throw std::runtime_error("Failed to open saved policy artifact: artifacts/pendulum_best_policy.txt");
-    }
-
+struct LoadedPolicy {
     mujoco_rl_training::PendulumLinearPolicy policy;
-    input >> policy.weights[0] >> policy.weights[1] >> policy.weights[2] >> policy.bias;
-    if (!input) {
-        throw std::runtime_error("Failed to parse saved policy artifact: artifacts/pendulum_best_policy.txt");
+    bool has_sigma = false;
+    double sigma = 0.0;
+};
+
+LoadedPolicy load_policy(const std::string& policy_path) {
+    std::ifstream input(policy_path);
+    if (!input.is_open()) {
+        throw std::runtime_error("Failed to open saved policy artifact: " + policy_path);
     }
 
-    return policy;
+    std::vector<double> values;
+    double value = 0.0;
+    while (input >> value) {
+        values.push_back(value);
+    }
+
+    if (!input.eof()) {
+        throw std::runtime_error("Failed while parsing saved policy artifact: " + policy_path);
+    }
+
+    if (values.size() != 4 && values.size() != 5) {
+        throw std::runtime_error("Expected 4-value linear policy or 5-value Gaussian policy artifact: " + policy_path);
+    }
+
+    LoadedPolicy loaded_policy;
+    loaded_policy.policy.weights[0] = values[0];
+    loaded_policy.policy.weights[1] = values[1];
+    loaded_policy.policy.weights[2] = values[2];
+    loaded_policy.policy.bias = values[3];
+    if (values.size() == 5) {
+        loaded_policy.has_sigma = true;
+        loaded_policy.sigma = values[4];
+    }
+
+    return loaded_policy;
 }
 
 }  // namespace
 
-int main() {
+int main(int argc, char* argv[]) {
     mujoco_rl_training::PendulumEnvConfig config;
     config.xml_path = ament_index_cpp::get_package_share_directory("mujoco_models") + "/models/pendulum/pendulum.xml";
     config.simulation_frequency = 1000;
@@ -45,16 +70,23 @@ int main() {
     config.episode_horizon = 400;
     config.seed = 0;
     config.repeat_action = 20;
-    config.reset_angle_range = 1.0;
-    config.reset_velocity_range = 1.0;
+    config.reset_angle_range = 2.0;
+    config.reset_velocity_range = 0.5;
 
-    const mujoco_rl_training::PendulumLinearPolicy policy = load_policy();
+    const std::string policy_path = (argc > 1) ? argv[1] : kDefaultPolicyArtifactPath;
+    const LoadedPolicy loaded_policy = load_policy(policy_path);
+    const mujoco_rl_training::PendulumLinearPolicy& policy = loaded_policy.policy;
     mujoco_rl_training::PendulumEnv env(config);
     auto observation = env.reset();
 
     std::cout << "Initial observation: [" << observation[0] << ", " << observation[1] << ", " << observation[2]
               << "]\n";
-    std::cout << "Loaded policy from: " << kPolicyArtifactPath << "\n";
+    std::cout << "Loaded policy from: " << policy_path << "\n";
+    if (loaded_policy.has_sigma) {
+        std::cout << "Policy artifact type: Gaussian mean-policy replay (sigma=" << loaded_policy.sigma << ")\n";
+    } else {
+        std::cout << "Policy artifact type: deterministic linear policy\n";
+    }
     std::cout << "Policy weights: [" << policy.weights[0] << ", " << policy.weights[1] << ", " << policy.weights[2]
               << "] bias=" << policy.bias << "\n";
 

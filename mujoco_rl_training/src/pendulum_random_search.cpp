@@ -58,7 +58,7 @@ double evaluate_average_return(mujoco_rl_training::PendulumEnv& env,
 int main() {
     mujoco_rl_training::PendulumEnvConfig config;
     config.episode_horizon = 400;
-    config.max_torque = 20;
+    config.max_torque = 40.0;
     config.repeat_action = 20;
     config.simulation_frequency = 1000;
     config.xml_path = ament_index_cpp::get_package_share_directory("mujoco_models") + "/models/pendulum/pendulum.xml";

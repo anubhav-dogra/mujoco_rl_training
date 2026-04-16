@@ -14,6 +14,7 @@ namespace mujoco_rl_training {
 namespace {
 
 constexpr double kPi = 3.14159265358979323846;
+constexpr double kThetaDotObservationScale = 1.0;
 
 }  // namespace
 
@@ -85,7 +86,7 @@ PendulumStepResult PendulumEnv::step(double action) {
     const double theta_normalized = normalize_angle(theta);
 
     PendulumStepResult result;
-    result.observation = {std::cos(theta), std::sin(theta), theta_dot};
+    result.observation = {std::cos(theta), std::sin(theta), theta_dot / kThetaDotObservationScale};
     result.reward = -((theta_normalized * theta_normalized) + (0.1 * theta_dot * theta_dot) +
                       (0.001 * clipped_action * clipped_action));
     ++step_count_;
@@ -104,7 +105,7 @@ std::array<double, 3> PendulumEnv::observation() const {
         theta_dot = sim_core_->data()->qvel[qvel_index_];
     }
 
-    return {std::cos(theta), std::sin(theta), theta_dot};
+    return {std::cos(theta), std::sin(theta), theta_dot / kThetaDotObservationScale};
 }
 
 MujocoSimCore& PendulumEnv::sim_core() { return *sim_core_; }

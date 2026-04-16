@@ -11,7 +11,7 @@ int main() {
     mujoco_rl_training::PendulumEnvConfig config;
     config.xml_path = ament_index_cpp::get_package_share_directory("mujoco_models") + "/models/pendulum/pendulum.xml";
     config.simulation_frequency = 1000;
-    config.max_torque = 20.0;
+    config.max_torque = 40.0;
     config.episode_horizon = 200;
     config.seed = 0;
     config.repeat_action = 20;

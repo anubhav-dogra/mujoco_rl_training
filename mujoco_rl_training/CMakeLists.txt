@@ -27,7 +27,8 @@ if(NOT EXISTS "${MUJOCO_PATH}/include/mujoco/mujoco.h")
 endif()
 
 add_library(mujoco_rl_training SHARED
-  src/PendulumEnv.cpp src/PendulumLinearPolicy.cpp
+  src/PendulumEnv.cpp
+   # src/PendulumLinearPolicy.cpp
 )
 
 target_include_directories(mujoco_rl_training PUBLIC
@@ -50,13 +51,17 @@ add_executable(pendulum_rl_demo
 )
 
 add_executable(pendulum_rl_visual_demo
-  src/pendulum_rl_visual_demo.cpp
+  src/pendulum_rl_env_visualize.cpp
 )
 
 add_executable(pendulum_random_search src/pendulum_random_search.cpp)
 
 add_executable(pendulum_policy_rollout
   src/pendulum_policy_rollout.cpp
+)
+
+add_executable(pendulum_reinforce
+  src/pendulum_reinforce.cpp
 )
 
 target_include_directories(pendulum_rl_demo PUBLIC
@@ -82,6 +87,16 @@ target_link_libraries(pendulum_random_search
 )
 
 ament_target_dependencies(pendulum_random_search
+  ament_index_cpp
+  mujoco_core
+)
+
+target_link_libraries(pendulum_reinforce
+  mujoco_rl_training
+  mujoco_core::mujoco_core
+)
+
+ament_target_dependencies(pendulum_reinforce
   ament_index_cpp
   mujoco_core
 )
@@ -136,6 +151,7 @@ install(
           pendulum_rl_visual_demo
           pendulum_random_search
           pendulum_policy_rollout
+          pendulum_reinforce
   RUNTIME DESTINATION lib/${PROJECT_NAME}
 )
 
