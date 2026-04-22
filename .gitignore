@@ -1,0 +1,12 @@
+/build
+/install
+/log
+/.pixi
+/.cache
+artifacts/
+compile_commands.json
+.DS_Store
+.vscode/
+.idea/
+*.swp
+*.swo
