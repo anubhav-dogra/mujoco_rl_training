@@ -18,6 +18,18 @@ It is intentionally separate from:
 
 because training should consume the simulation backend directly, without ROS in the loop.
 
+## Dependencies
+
+This repo is not a self-contained simulation stack.
+
+It requires the public simulation packages from `mujoco_sim`, in particular:
+
+- `mujoco_core`
+- `mujoco_viewer`
+- `mujoco_models`
+
+So `mujoco_rl_training` is intended to be built in a workspace together with `mujoco_sim`, not as a fully standalone repo by itself.
+
 ## Scope
 
 The current environment is:
@@ -127,12 +139,6 @@ pixi run pendulum_rl_visual_demo
 ### `pendulum_random_search`
 
 Deterministic linear-policy baseline trainer.
-
-Run:
-
-```bash
-pixi run ./install/mujoco_rl_training/lib/mujoco_rl_training/pendulum_random_search
-```
 
 It saves:
 
