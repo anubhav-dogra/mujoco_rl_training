@@ -28,6 +28,7 @@ endif()
 
 add_library(mujoco_rl_training SHARED
   src/PendulumEnv.cpp
+  src/DoublePendulumEnv.cpp
    # src/PendulumLinearPolicy.cpp
 )
 
@@ -62,6 +63,10 @@ add_executable(pendulum_policy_rollout
 
 add_executable(pendulum_reinforce
   src/pendulum_reinforce.cpp
+)
+
+add_executable(double_pendulum_rl_visual_demo
+  src/double_pendulum_rl_visual_demo.cpp
 )
 
 target_include_directories(pendulum_rl_demo PUBLIC
@@ -99,6 +104,25 @@ target_link_libraries(pendulum_reinforce
 ament_target_dependencies(pendulum_reinforce
   ament_index_cpp
   mujoco_core
+)
+
+target_include_directories(double_pendulum_rl_visual_demo PUBLIC
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+  $<BUILD_INTERFACE:${MUJOCO_PATH}/include/mujoco>
+  $<BUILD_INTERFACE:${MUJOCO_PATH}/include>
+  $<INSTALL_INTERFACE:include>
+)
+
+target_link_libraries(double_pendulum_rl_visual_demo
+  mujoco_rl_training
+  mujoco_viewer::mujoco_viewer
+  mujoco_core::mujoco_core
+)
+
+ament_target_dependencies(double_pendulum_rl_visual_demo
+  ament_index_cpp
+  mujoco_core
+  mujoco_viewer
 )
 
 target_include_directories(pendulum_rl_visual_demo PUBLIC
@@ -148,6 +172,7 @@ install(
 
 install(
   TARGETS pendulum_rl_demo
+          double_pendulum_rl_visual_demo
           pendulum_rl_visual_demo
           pendulum_random_search
           pendulum_policy_rollout

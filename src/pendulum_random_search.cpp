@@ -69,6 +69,7 @@ int main() {
     constexpr int kNumIterations = 500;
     constexpr int kEpisodesPerEvaluation = 10;
     constexpr double kNoiseStddev = 1.0;
+    constexpr int kLogEvery = 25;
 
     double best_return = evaluate_average_return(env, best_policy, kEpisodesPerEvaluation);
 
@@ -100,6 +101,13 @@ int main() {
                 best_policy = negative_policy;
                 best_return = negative_return;
             }
+        }
+
+        if (itr % kLogEvery == 0) {
+            std::cout << "iteration=" << itr
+                      << " positive_return=" << positive_return
+                      << " negative_return=" << negative_return
+                      << " best_return=" << best_return << std::endl;
         }
     }
 
