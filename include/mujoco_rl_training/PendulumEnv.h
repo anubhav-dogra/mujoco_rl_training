@@ -33,6 +33,7 @@ class PendulumEnv {
     std::array<double, 3> reset();
     PendulumStepResult step(double action);
     std::array<double, 3> observation() const;
+    const PendulumEnvConfig& config() const;
     MujocoSimCore& sim_core();
     const MujocoSimCore& sim_core() const;
 

@@ -29,7 +29,7 @@ struct DoublePendulumStepResult {
     double reward = 0.0;
     bool truncated = false;
     bool terminated = false;
-    std::vector<double> observations{};
+    std::vector<double> observation{};
 };
 
 class DoublePendulumEnv {
@@ -38,6 +38,7 @@ class DoublePendulumEnv {
     DoublePendulumStepResult step(const std::vector<double>& actions);
     std::vector<double> observation() const;
     std::vector<double> reset();
+    const DoublePendulumEnvConfig& config() const;
     MujocoSimCore& sim_core();
     const MujocoSimCore& sim_core() const;
 

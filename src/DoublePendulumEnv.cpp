@@ -106,6 +106,8 @@ MujocoSimCore& DoublePendulumEnv::sim_core() { return *sim_core_; }
 
 const MujocoSimCore& DoublePendulumEnv::sim_core() const { return *sim_core_; }
 
+const DoublePendulumEnvConfig& DoublePendulumEnv::config() const { return config_; }
+
 DoublePendulumStepResult DoublePendulumEnv::step(const std::vector<double>& action) {
     if (action.size() != control_indices_.size()) {
         throw std::runtime_error("DoublePendulumEnv: action size must match joint/control count.");
@@ -137,7 +139,7 @@ DoublePendulumStepResult DoublePendulumEnv::step(const std::vector<double>& acti
 
     DoublePendulumStepResult result;
     result.reward = compute_reward(theta, theta_dot, clipped_action);
-    result.observations = observation();
+    result.observation = observation();
     ++step_count_;
     result.terminated = false;
     result.truncated = step_count_ >= config_.episode_horizon;

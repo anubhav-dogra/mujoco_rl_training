@@ -29,7 +29,6 @@ endif()
 add_library(mujoco_rl_training SHARED
   src/PendulumEnv.cpp
   src/DoublePendulumEnv.cpp
-   # src/PendulumLinearPolicy.cpp
 )
 
 target_include_directories(mujoco_rl_training PUBLIC
@@ -56,9 +55,13 @@ add_executable(pendulum_rl_visual_demo
 )
 
 add_executable(pendulum_random_search src/pendulum_random_search.cpp)
+add_executable(double_pendulum_random_search src/double_pendulum_random_search.cpp)
 
 add_executable(pendulum_policy_rollout
   src/pendulum_policy_rollout.cpp
+)
+add_executable(double_pendulum_policy_rollout
+  src/double_pendulum_policy_rollout.cpp
 )
 
 add_executable(pendulum_reinforce
@@ -90,8 +93,16 @@ target_link_libraries(pendulum_random_search
   mujoco_rl_training
   mujoco_core::mujoco_core
 )
+target_link_libraries(double_pendulum_random_search
+  mujoco_rl_training
+  mujoco_core::mujoco_core
+)
 
 ament_target_dependencies(pendulum_random_search
+  ament_index_cpp
+  mujoco_core
+)
+ament_target_dependencies(double_pendulum_random_search
   ament_index_cpp
   mujoco_core
 )
@@ -151,13 +162,32 @@ target_include_directories(pendulum_policy_rollout PUBLIC
   $<INSTALL_INTERFACE:include>
 )
 
+target_include_directories(double_pendulum_policy_rollout PUBLIC
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+  $<BUILD_INTERFACE:${MUJOCO_PATH}/include/mujoco>
+  $<BUILD_INTERFACE:${MUJOCO_PATH}/include>
+  $<INSTALL_INTERFACE:include>
+)
+
 target_link_libraries(pendulum_policy_rollout
   mujoco_rl_training
   mujoco_viewer::mujoco_viewer
   mujoco_core::mujoco_core
 )
 
+target_link_libraries(double_pendulum_policy_rollout
+  mujoco_rl_training
+  mujoco_viewer::mujoco_viewer
+  mujoco_core::mujoco_core
+)
+
 ament_target_dependencies(pendulum_policy_rollout
+  ament_index_cpp
+  mujoco_core
+  mujoco_viewer
+)
+
+ament_target_dependencies(double_pendulum_policy_rollout
   ament_index_cpp
   mujoco_core
   mujoco_viewer
@@ -175,7 +205,9 @@ install(
           double_pendulum_rl_visual_demo
           pendulum_rl_visual_demo
           pendulum_random_search
+          double_pendulum_random_search
           pendulum_policy_rollout
+          double_pendulum_policy_rollout
           pendulum_reinforce
   RUNTIME DESTINATION lib/${PROJECT_NAME}
 )

@@ -1,9 +1,8 @@
 #include <mujoco_rl_training/PendulumLinearPolicy.h>
 #include <mujoco_rl_training/PendulumEnv.h>
+#include <mujoco_rl_training/PolicyIO.h>
 #include <ament_index_cpp/get_package_share_directory.hpp>
 #include <cstddef>
-#include <filesystem>
-#include <fstream>
 #include <iostream>
 #include <random>
 #include <stdexcept>
@@ -13,17 +12,9 @@ namespace {
 const char* kPolicyArtifactPath = "artifacts/pendulum_best_policy.txt";
 
 void save_policy(const mujoco_rl_training::PendulumLinearPolicy& policy) {
-    std::filesystem::create_directories("artifacts");
+    auto output = mujoco_rl_training::open_artifact_output(kPolicyArtifactPath);
 
-    std::ofstream output(kPolicyArtifactPath, std::ios::trunc);
-    if (!output.is_open()) {
-        throw std::runtime_error("Failed to open policy artifact for writing.");
-    }
-
-    output << policy.weights[0] << ' '
-           << policy.weights[1] << ' '
-           << policy.weights[2] << ' '
-           << policy.bias << '\n';
+    output << policy.weights[0] << ' ' << policy.weights[1] << ' ' << policy.weights[2] << ' ' << policy.bias << '\n';
 }
 
 }  // namespace
@@ -104,10 +95,8 @@ int main() {
         }
 
         if (itr % kLogEvery == 0) {
-            std::cout << "iteration=" << itr
-                      << " positive_return=" << positive_return
-                      << " negative_return=" << negative_return
-                      << " best_return=" << best_return << std::endl;
+            std::cout << "iteration=" << itr << " positive_return=" << positive_return
+                      << " negative_return=" << negative_return << " best_return=" << best_return << std::endl;
         }
     }
 

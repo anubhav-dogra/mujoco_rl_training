@@ -1,10 +1,9 @@
 #include <mujoco_rl_training/PendulumGaussianPolicy.h>
 #include <mujoco_rl_training/PendulumEnv.h>
+#include <mujoco_rl_training/PolicyIO.h>
 #include <ament_index_cpp/get_package_share_directory.hpp>
 #include <array>
 #include <cmath>
-#include <filesystem>
-#include <fstream>
 #include <iostream>
 #include <random>
 #include <stdexcept>
@@ -15,12 +14,7 @@ namespace {
 const char* kPolicyArtifactPath = "artifacts/pendulum_reinforce_policy.txt";
 
 void save_policy(const mujoco_rl_training::PendulumGaussianPolicy& policy) {
-    std::filesystem::create_directories("artifacts");
-
-    std::ofstream output(kPolicyArtifactPath, std::ios::trunc);
-    if (!output.is_open()) {
-        throw std::runtime_error("Failed to open REINFORCE policy artifact for writing.");
-    }
+    auto output = mujoco_rl_training::open_artifact_output(kPolicyArtifactPath);
 
     output << policy.weights[0] << ' ' << policy.weights[1] << ' ' << policy.weights[2] << ' ' << policy.bias << ' '
            << policy.sigma << '\n';

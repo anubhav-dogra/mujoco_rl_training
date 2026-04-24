@@ -108,6 +108,8 @@ std::array<double, 3> PendulumEnv::observation() const {
     return {std::cos(theta), std::sin(theta), theta_dot / kThetaDotObservationScale};
 }
 
+const PendulumEnvConfig& PendulumEnv::config() const { return config_; }
+
 MujocoSimCore& PendulumEnv::sim_core() { return *sim_core_; }
 
 const MujocoSimCore& PendulumEnv::sim_core() const { return *sim_core_; }
