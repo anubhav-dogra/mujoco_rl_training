@@ -236,6 +236,10 @@ if(BUILD_TESTING)
   # comment the line when this package is in a git repo and when
   # a copyright and license is added to all source files
   set(ament_cmake_cpplint_FOUND TRUE)
+  # Formatting is enforced by repository clang-format/pre-commit, not ROS uncrustify.
+  set(ament_cmake_uncrustify_FOUND TRUE)
+  # Avoid network/schema lookups during hermetic pixi/CI test runs.
+  set(ament_cmake_xmllint_FOUND TRUE)
   ament_lint_auto_find_test_dependencies()
 endif()
 
