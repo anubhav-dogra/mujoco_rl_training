@@ -1,12 +1,14 @@
 #include <mujoco_rl_training/PendulumGaussianPolicy.h>
 #include <mujoco_rl_training/PendulumEnv.h>
+#include <mujoco_rl_training/PendulumPolicyMetadata.h>
 #include <mujoco_rl_training/PolicyIO.h>
 #include <ament_index_cpp/get_package_share_directory.hpp>
 #include <array>
+#include <algorithm>
 #include <cmath>
+#include <cstddef>
 #include <iostream>
 #include <random>
-#include <stdexcept>
 #include <vector>
 
 namespace {
@@ -176,12 +178,17 @@ int main() {
 
     policy = best_policy;
     save_policy(policy);
+    const auto metadata_path = mujoco_rl_training::pendulum_metadata_path_for_policy(kPolicyArtifactPath);
+    mujoco_rl_training::save_pendulum_policy_metadata(
+        metadata_path, kPolicyArtifactPath, config, mujoco_rl_training::PendulumPolicyActionScale::PhysicalTorque,
+        "reinforce", best_mean_return);
     std::cout << "Final best mean-policy return: " << best_mean_return << std::endl;
     std::cout << "Best policy weights: [" << policy.weights[0] << ", " << policy.weights[1] << ", " << policy.weights[2]
               << "]" << std::endl;
     std::cout << "Best policy bias: " << policy.bias << std::endl;
     std::cout << "Best policy sigma: " << policy.sigma << std::endl;
     std::cout << "Saved best policy to: " << kPolicyArtifactPath << std::endl;
+    std::cout << "Saved policy metadata to: " << metadata_path << std::endl;
 
     return 0;
 }

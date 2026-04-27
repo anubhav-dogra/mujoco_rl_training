@@ -1,5 +1,6 @@
 #include <mujoco_rl_training/PendulumLinearPolicy.h>
 #include <mujoco_rl_training/PendulumEnv.h>
+#include <mujoco_rl_training/PendulumPolicyMetadata.h>
 #include <mujoco_rl_training/PolicyIO.h>
 #include <ament_index_cpp/get_package_share_directory.hpp>
 #include <cstddef>
@@ -105,7 +106,12 @@ int main() {
               << best_policy.weights[2] << "]" << std::endl;
     std::cout << "Best policy bias: " << best_policy.bias << std::endl;
     save_policy(best_policy);
+    const auto metadata_path = mujoco_rl_training::pendulum_metadata_path_for_policy(kPolicyArtifactPath);
+    mujoco_rl_training::save_pendulum_policy_metadata(
+        metadata_path, kPolicyArtifactPath, config, mujoco_rl_training::PendulumPolicyActionScale::PhysicalTorque,
+        "random_search", best_return);
     std::cout << "Saved best policy to: " << kPolicyArtifactPath << std::endl;
+    std::cout << "Saved policy metadata to: " << metadata_path << std::endl;
 
     return 0;
 }

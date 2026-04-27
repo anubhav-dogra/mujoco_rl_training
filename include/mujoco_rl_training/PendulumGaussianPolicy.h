@@ -17,6 +17,7 @@ struct Trajectory {
 };
 
 struct PendulumGaussianPolicy {
+    /*Actually a action taken with respect from the current observations, not really mean*/
     double mean_action(const std::array<double, 3>& observations) const {
         return (weights[0] * observations[0]) + (weights[1] * observations[1]) + (weights[2] * observations[2]) + bias;
     }
@@ -27,7 +28,7 @@ struct PendulumGaussianPolicy {
         return dist(rng);
     }
 
-    /* The Gaussian density is:
+    /* The Gaussian probability density is:
 
     pi(a|s) = 1 / sqrt(2*pi*sigma^2) * exp( -(a - mu)^2 / (2*sigma^2) )
 
@@ -49,5 +50,14 @@ struct PendulumGaussianPolicy {
     std::array<double, 3> weights{};
     double bias = 0.0;
     double sigma = 0.1;
+};
+
+struct PendulumValueFunction {
+    double predict(const std::array<double, 3>& observations) const {
+        return (weights[0] * observations[0]) + (weights[1] * observations[1]) + (weights[2] * observations[2]) + bias;
+    }
+
+    std::array<double, 3> weights{};
+    double bias = 0.0;
 };
 }  // namespace mujoco_rl_training

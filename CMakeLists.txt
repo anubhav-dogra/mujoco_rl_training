@@ -68,6 +68,10 @@ add_executable(pendulum_reinforce
   src/pendulum_reinforce.cpp
 )
 
+add_executable(pendulum_vpg
+  src/pendulum_vpg.cpp
+)
+
 add_executable(double_pendulum_rl_visual_demo
   src/double_pendulum_rl_visual_demo.cpp
 )
@@ -112,7 +116,17 @@ target_link_libraries(pendulum_reinforce
   mujoco_core::mujoco_core
 )
 
+target_link_libraries(pendulum_vpg
+  mujoco_rl_training
+  mujoco_core::mujoco_core
+)
+
 ament_target_dependencies(pendulum_reinforce
+  ament_index_cpp
+  mujoco_core
+)
+
+ament_target_dependencies(pendulum_vpg
   ament_index_cpp
   mujoco_core
 )
@@ -209,6 +223,7 @@ install(
           pendulum_policy_rollout
           double_pendulum_policy_rollout
           pendulum_reinforce
+          pendulum_vpg
   RUNTIME DESTINATION lib/${PROJECT_NAME}
 )
 

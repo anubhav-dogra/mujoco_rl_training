@@ -42,7 +42,7 @@ int main() {
     mujoco_rl_training::DoublePendulumEnv env(config);
     mujoco_rl_training::DoublePendulumLinearPolicy best_policy{};
 
-    constexpr int kNumIterations = 500;
+    constexpr int kNumIterations = 1000;
     constexpr int kEpisodesPerEvaluation = 20;
     constexpr double kNoiseStdDev = 0.5;
     constexpr int kLogEvery = 25;

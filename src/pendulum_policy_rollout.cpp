@@ -1,5 +1,6 @@
 #include <mujoco_rl_training/PendulumEnv.h>
 #include <mujoco_rl_training/PendulumLinearPolicy.h>
+#include <mujoco_rl_training/PendulumPolicyMetadata.h>
 
 #include <ament_index_cpp/get_package_share_directory.hpp>
 
@@ -74,6 +75,23 @@ int main(int argc, char* argv[]) {
     config.reset_velocity_range = 0.5;
 
     const std::string policy_path = (argc > 1) ? argv[1] : kDefaultPolicyArtifactPath;
+    const std::string metadata_path =
+        (argc > 2) ? argv[2] : mujoco_rl_training::pendulum_metadata_path_for_policy(policy_path);
+    auto action_scale = mujoco_rl_training::PendulumPolicyActionScale::PhysicalTorque;
+    const auto metadata = mujoco_rl_training::load_pendulum_policy_metadata(metadata_path);
+    if (metadata.has_value()) {
+        config = metadata->config;
+        action_scale = metadata->action_scale;
+        std::cout << "Loaded policy metadata from: " << metadata_path << "\n";
+        std::cout << "Policy algorithm: " << metadata->algorithm << "\n";
+        std::cout << "Policy action scale: " << mujoco_rl_training::to_string(action_scale) << "\n";
+        if (metadata->best_return.has_value()) {
+            std::cout << "Saved policy best_return: " << metadata->best_return.value() << "\n";
+        }
+    } else {
+        std::cout << "Policy metadata not found, assuming physical torque actions: " << metadata_path << "\n";
+    }
+
     const LoadedPolicy loaded_policy = load_policy(policy_path);
     const mujoco_rl_training::PendulumLinearPolicy& policy = loaded_policy.policy;
     mujoco_rl_training::PendulumEnv env(config);
@@ -123,7 +141,9 @@ int main(int argc, char* argv[]) {
             }
 
             if (!paused.load(std::memory_order_acquire)) {
-                const double action = policy.action_from_obs(observation);
+                const double policy_action = policy.action_from_obs(observation);
+                const double action =
+                    mujoco_rl_training::pendulum_physical_action(policy_action, action_scale, config.max_torque);
                 const auto result = env.step(action);
                 observation = result.observation;
 
