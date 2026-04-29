@@ -26,186 +26,71 @@ if(NOT EXISTS "${MUJOCO_PATH}/include/mujoco/mujoco.h")
     "Set MUJOCO_PATH to your MuJoCo install or build inside pixi.")
 endif()
 
+function(target_mujoco_include_dirs target)
+  target_include_directories(${target} PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+    $<BUILD_INTERFACE:${MUJOCO_PATH}/include/mujoco>
+    $<BUILD_INTERFACE:${MUJOCO_PATH}/include>
+    $<INSTALL_INTERFACE:include>
+  )
+endfunction()
+
+function(add_rl_executable target source)
+  add_executable(${target} ${source})
+  target_mujoco_include_dirs(${target})
+  target_link_libraries(${target}
+    mujoco_rl_training
+    mujoco_core::mujoco_core
+  )
+  ament_target_dependencies(${target}
+    ament_index_cpp
+    mujoco_core
+  )
+  list(APPEND RL_EXECUTABLE_TARGETS ${target})
+  set(RL_EXECUTABLE_TARGETS "${RL_EXECUTABLE_TARGETS}" PARENT_SCOPE)
+endfunction()
+
+function(add_rl_viewer_executable target source)
+  add_executable(${target} ${source})
+  target_mujoco_include_dirs(${target})
+  target_link_libraries(${target}
+    mujoco_rl_training
+    mujoco_viewer::mujoco_viewer
+    mujoco_core::mujoco_core
+  )
+  ament_target_dependencies(${target}
+    ament_index_cpp
+    mujoco_core
+    mujoco_viewer
+  )
+  list(APPEND RL_EXECUTABLE_TARGETS ${target})
+  set(RL_EXECUTABLE_TARGETS "${RL_EXECUTABLE_TARGETS}" PARENT_SCOPE)
+endfunction()
+
 add_library(mujoco_rl_training SHARED
   src/PendulumEnv.cpp
   src/DoublePendulumEnv.cpp
 )
-
-target_include_directories(mujoco_rl_training PUBLIC
-  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
-  $<BUILD_INTERFACE:${MUJOCO_PATH}/include/mujoco>
-  $<BUILD_INTERFACE:${MUJOCO_PATH}/include>
-  $<INSTALL_INTERFACE:include>
-)
-
+target_mujoco_include_dirs(mujoco_rl_training)
 target_link_libraries(mujoco_rl_training
   mujoco_core::mujoco_core
 )
-
 ament_target_dependencies(mujoco_rl_training
   mujoco_core
 )
 
-add_executable(pendulum_rl_demo
-  src/pendulum_rl_demo.cpp
-)
+set(RL_EXECUTABLE_TARGETS)
+add_rl_executable(pendulum_rl_demo src/pendulum_rl_demo.cpp)
+add_rl_executable(pendulum_random_search src/pendulum_random_search.cpp)
+add_rl_executable(double_pendulum_random_search src/double_pendulum_random_search.cpp)
+add_rl_executable(pendulum_reinforce src/pendulum_reinforce.cpp)
+add_rl_executable(pendulum_vpg src/pendulum_vpg.cpp)
+add_rl_executable(double_pendulum_vpg src/double_pendulum_vpg.cpp)
 
-add_executable(pendulum_rl_visual_demo
-  src/pendulum_rl_env_visualize.cpp
-)
-
-add_executable(pendulum_random_search src/pendulum_random_search.cpp)
-add_executable(double_pendulum_random_search src/double_pendulum_random_search.cpp)
-
-add_executable(pendulum_policy_rollout
-  src/pendulum_policy_rollout.cpp
-)
-add_executable(double_pendulum_policy_rollout
-  src/double_pendulum_policy_rollout.cpp
-)
-
-add_executable(pendulum_reinforce
-  src/pendulum_reinforce.cpp
-)
-
-add_executable(pendulum_vpg
-  src/pendulum_vpg.cpp
-)
-
-add_executable(double_pendulum_rl_visual_demo
-  src/double_pendulum_rl_visual_demo.cpp
-)
-
-target_include_directories(pendulum_rl_demo PUBLIC
-  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
-  $<BUILD_INTERFACE:${MUJOCO_PATH}/include/mujoco>
-  $<BUILD_INTERFACE:${MUJOCO_PATH}/include>
-  $<INSTALL_INTERFACE:include>
-)
-
-target_link_libraries(pendulum_rl_demo
-  mujoco_rl_training
-  mujoco_core::mujoco_core
-)
-
-ament_target_dependencies(pendulum_rl_demo
-  ament_index_cpp
-  mujoco_core
-)
-
-target_link_libraries(pendulum_random_search
-  mujoco_rl_training
-  mujoco_core::mujoco_core
-)
-target_link_libraries(double_pendulum_random_search
-  mujoco_rl_training
-  mujoco_core::mujoco_core
-)
-
-ament_target_dependencies(pendulum_random_search
-  ament_index_cpp
-  mujoco_core
-)
-ament_target_dependencies(double_pendulum_random_search
-  ament_index_cpp
-  mujoco_core
-)
-
-target_link_libraries(pendulum_reinforce
-  mujoco_rl_training
-  mujoco_core::mujoco_core
-)
-
-target_link_libraries(pendulum_vpg
-  mujoco_rl_training
-  mujoco_core::mujoco_core
-)
-
-ament_target_dependencies(pendulum_reinforce
-  ament_index_cpp
-  mujoco_core
-)
-
-ament_target_dependencies(pendulum_vpg
-  ament_index_cpp
-  mujoco_core
-)
-
-target_include_directories(double_pendulum_rl_visual_demo PUBLIC
-  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
-  $<BUILD_INTERFACE:${MUJOCO_PATH}/include/mujoco>
-  $<BUILD_INTERFACE:${MUJOCO_PATH}/include>
-  $<INSTALL_INTERFACE:include>
-)
-
-target_link_libraries(double_pendulum_rl_visual_demo
-  mujoco_rl_training
-  mujoco_viewer::mujoco_viewer
-  mujoco_core::mujoco_core
-)
-
-ament_target_dependencies(double_pendulum_rl_visual_demo
-  ament_index_cpp
-  mujoco_core
-  mujoco_viewer
-)
-
-target_include_directories(pendulum_rl_visual_demo PUBLIC
-  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
-  $<BUILD_INTERFACE:${MUJOCO_PATH}/include/mujoco>
-  $<BUILD_INTERFACE:${MUJOCO_PATH}/include>
-  $<INSTALL_INTERFACE:include>
-)
-
-target_link_libraries(pendulum_rl_visual_demo
-  mujoco_rl_training
-  mujoco_viewer::mujoco_viewer
-  mujoco_core::mujoco_core
-)
-
-ament_target_dependencies(pendulum_rl_visual_demo
-  ament_index_cpp
-  mujoco_core
-  mujoco_viewer
-)
-
-target_include_directories(pendulum_policy_rollout PUBLIC
-  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
-  $<BUILD_INTERFACE:${MUJOCO_PATH}/include/mujoco>
-  $<BUILD_INTERFACE:${MUJOCO_PATH}/include>
-  $<INSTALL_INTERFACE:include>
-)
-
-target_include_directories(double_pendulum_policy_rollout PUBLIC
-  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
-  $<BUILD_INTERFACE:${MUJOCO_PATH}/include/mujoco>
-  $<BUILD_INTERFACE:${MUJOCO_PATH}/include>
-  $<INSTALL_INTERFACE:include>
-)
-
-target_link_libraries(pendulum_policy_rollout
-  mujoco_rl_training
-  mujoco_viewer::mujoco_viewer
-  mujoco_core::mujoco_core
-)
-
-target_link_libraries(double_pendulum_policy_rollout
-  mujoco_rl_training
-  mujoco_viewer::mujoco_viewer
-  mujoco_core::mujoco_core
-)
-
-ament_target_dependencies(pendulum_policy_rollout
-  ament_index_cpp
-  mujoco_core
-  mujoco_viewer
-)
-
-ament_target_dependencies(double_pendulum_policy_rollout
-  ament_index_cpp
-  mujoco_core
-  mujoco_viewer
-)
+add_rl_viewer_executable(pendulum_rl_visual_demo src/pendulum_rl_env_visualize.cpp)
+add_rl_viewer_executable(double_pendulum_rl_visual_demo src/double_pendulum_rl_visual_demo.cpp)
+add_rl_viewer_executable(pendulum_policy_rollout src/pendulum_policy_rollout.cpp)
+add_rl_viewer_executable(double_pendulum_policy_rollout src/double_pendulum_policy_rollout.cpp)
 
 install(
   TARGETS mujoco_rl_training
@@ -215,15 +100,7 @@ install(
 )
 
 install(
-  TARGETS pendulum_rl_demo
-          double_pendulum_rl_visual_demo
-          pendulum_rl_visual_demo
-          pendulum_random_search
-          double_pendulum_random_search
-          pendulum_policy_rollout
-          double_pendulum_policy_rollout
-          pendulum_reinforce
-          pendulum_vpg
+  TARGETS ${RL_EXECUTABLE_TARGETS}
   RUNTIME DESTINATION lib/${PROJECT_NAME}
 )
 
