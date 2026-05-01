@@ -97,28 +97,26 @@ struct VpgBatch {
     std::vector<std::vector<double>> actions;
     std::vector<double> rewards;
     std::vector<double> values;
-    std::vector<double> log_probabilities;
     std::vector<double> advantages;
     std::vector<double> returns;
     std::vector<bool> dones;
+    double bootstrap_value = 0.0;  // V(s_{T+1}) for last non-terminal step
 
     void reserve(std::size_t size) {
         observations.reserve(size);
         actions.reserve(size);
         rewards.reserve(size);
         values.reserve(size);
-        log_probabilities.reserve(size);
         advantages.reserve(size);
         returns.reserve(size);
         dones.reserve(size);
     }
     void store(const std::vector<double>& observation, const std::vector<double>& action, double reward, double value,
-               double log_prob, bool done) {
+               bool done) {
         observations.push_back(observation);
         actions.push_back(action);
         rewards.push_back(reward);
         values.push_back(value);
-        log_probabilities.push_back(log_prob);
         dones.push_back(done);
     }
 
@@ -134,20 +132,28 @@ VpgBatch collect_vpg_batch(mujoco_rl_training::DoublePendulumEnv& env,
     batch.reserve(steps_per_epochs);
     auto obs = env.reset();
 
+    std::vector<double> last_next_obs = obs;
+    bool last_done = false;
+
     while (batch.size() < steps_per_epochs) {
         const auto normalized_action = policy.sample_action(obs, rng);
         const auto action = scale_action(normalized_action, env.config().max_torques);
         const auto value = critic.predict(obs);
-        const auto log_prob = policy.log_probability(obs, normalized_action);
 
         const auto result = env.step(action);
         const bool done = result.terminated || result.truncated;
-        batch.store(obs, normalized_action, result.reward, value, log_prob, done);
+
+        batch.store(obs, normalized_action, result.reward, value, done);
+        last_next_obs = result.observation;
+        last_done = done;
         obs = result.observation;
         if (done) {
             obs = env.reset();
         }
     }
+
+    // If the batch ended mid-episode, bootstrap returns with V(s_{T+1}) instead of 0.
+    batch.bootstrap_value = last_done ? 0.0 : critic.predict(last_next_obs);
     return batch;
 }
 
@@ -159,7 +165,7 @@ void compute_gae(VpgBatch& batch, double gamma, double lambda) {
         return;
     }
     double gae = 0.0;
-    double next_value = 0.0;
+    double next_value = batch.bootstrap_value;
     for (int t = static_cast<int>(batch.size()) - 1; t >= 0; --t) {
         const std::size_t index = static_cast<std::size_t>(t);
         const double mask = batch.dones[index] ? 0.0 : 1.0;
@@ -203,26 +209,33 @@ void update_vpg_actor(mujoco_rl_training::DoublePendulumGaussianPolicy& policy, 
     std::vector<std::vector<double>> grad_w(policy.weights.size(), std::vector<double>(policy.weights[0].size(), 0.0));
     std::vector<double> grad_b(policy.bias.size(), 0.0);
 
-    const double variance = policy.sigma * policy.sigma;
-
+    // Policy gradient theorem: ∇_θ J = E[ ∇_θ log π(a|s) * A(s,a) ]
     for (std::size_t t = 0; t < batch.size(); ++t) {
-        const auto mu = policy.mean_action(batch.observations[t]);
+        const auto log_grad = policy.log_prob_gradient(batch.observations[t], batch.actions[t]);
+        const double advantage = batch.advantages[t];
         for (std::size_t action_index = 0; action_index < policy.bias.size(); ++action_index) {
-            const auto coeff = (batch.actions[t][action_index] - mu[action_index]) / variance;
-            const double advantage = batch.advantages[t];
             for (std::size_t j = 0; j < batch.observations[t].size(); ++j) {
-                grad_w[action_index][j] += advantage * coeff * batch.observations[t][j];
+                grad_w[action_index][j] += advantage * log_grad[action_index] * batch.observations[t][j];
             }
-            grad_b[action_index] += advantage * coeff;
+            grad_b[action_index] += advantage * log_grad[action_index];
         }
     }
-    const double scale = 1.0 / static_cast<double>(batch.size());
 
+    // Clip gradient norm to prevent weight explosion when policy drifts outside action bounds.
+    const double max_grad_norm = 1.0;
+    double grad_norm_sq = 0.0;
+    for (const auto& row : grad_w) {
+        for (double g : row) { grad_norm_sq += g * g; }
+    }
+    for (double g : grad_b) { grad_norm_sq += g * g; }
+    const double grad_norm = std::sqrt(grad_norm_sq);
+    const double clip_scale = (grad_norm > max_grad_norm) ? (max_grad_norm / grad_norm) : 1.0;
+
+    const double scale = clip_scale / static_cast<double>(batch.size());
     for (std::size_t a = 0; a < policy.bias.size(); ++a) {
         for (std::size_t j = 0; j < policy.weights[a].size(); ++j) {
             policy.weights[a][j] += learning_rate * grad_w[a][j] * scale;
         }
-
         policy.bias[a] += learning_rate * grad_b[a] * scale;
     }
 }
@@ -268,34 +281,36 @@ int main() {
         ament_index_cpp::get_package_share_directory("mujoco_models") + "/models/double_pendulum/double_pendulum.xml";
     config.joint_names = {"joint_1", "joint_2"};
     config.target_angles = {kPi, 0.0};
-    config.angle_cost_weights = {1.0, 1.0};
-    config.velocity_cost_weights = {0.01, 0.01};
-    config.control_cost_weights = {0.001, 0.001};
-    config.max_torques = {40, 30};
-    config.episode_horizon = 400;
-    config.repeat_action = 20;
+    config.angle_cost_weights = {3.0, 2.0};
+    config.velocity_cost_weights = {0.001, 0.001};
+    config.control_cost_weights = {0.0001, 0.0001};
+    config.max_torques = {20, 15};
+    config.episode_horizon = 1000;
+    config.repeat_action = 10;
     config.simulation_frequency = 1000;
 
     mujoco_rl_training::DoublePendulumEnv env(config);
 
     mujoco_rl_training::DoublePendulumGaussianPolicy policy{};
     mujoco_rl_training::DoublePendulumValueFunction critic{};
-    policy.sigma = 1.0;
+    policy.sigma = 0.5;
 
-    constexpr int kEpochs = 1000;
+    constexpr int kEpochs = 4000;
     constexpr std::size_t kStepsPerEpoch = 4000;
-    constexpr int kEpisodesPerEvaluation = 1;
+    constexpr int kEpisodesPerEvaluation = 10;
     constexpr double kGamma = 0.99;
     constexpr double kLambda = 0.95;
     constexpr double kActorLearningRate = 0.1;
     constexpr double kCriticLearningRate = 0.001;
     constexpr int kValueTrainIters = 40;
-    constexpr int kLogEvery = 10;
+    constexpr int kEarlyStopPatience = 500;
+    constexpr int kLogEvery = 25;
 
     std::mt19937 rng(123);
 
     double best_mean_return = evaluate_mean_policy(env, policy, kEpisodesPerEvaluation);
     auto best_policy = policy;
+    int epochs_without_improvement = 0;
 
     std::cout << "Initial mean-policy return: " << best_mean_return << std::endl;
 
@@ -307,11 +322,21 @@ int main() {
         if (mean_return > best_mean_return) {
             best_mean_return = mean_return;
             best_policy = policy;
+            epochs_without_improvement = 0;
+        } else {
+            ++epochs_without_improvement;
         }
 
         if (epoch % kLogEvery == 0) {
             std::cout << "epoch=" << epoch << " mean_policy_return=" << mean_return
-                      << " best_mean_return=" << best_mean_return << std::endl;
+                      << " best_mean_return=" << best_mean_return << " no_improve=" << epochs_without_improvement
+                      << std::endl;
+        }
+
+        if (epochs_without_improvement >= kEarlyStopPatience) {
+            std::cout << "Early stopping at epoch=" << epoch << " (no improvement for " << kEarlyStopPatience
+                      << " epochs)" << std::endl;
+            break;
         }
     }
 

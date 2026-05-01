@@ -45,6 +45,23 @@ struct DoublePendulumGaussianPolicy {
         return log_prob;
     }
 
+    // Returns d(log π)/dμ_i = (a_i - μ_i) / σ² for each action dimension.
+    // This is the score function used in the policy gradient: ∇_θ J = E[∇_θ log π * A].
+    std::vector<double> log_prob_gradient(const std::vector<double>& observations,
+                                          const std::vector<double>& action) const {
+        validate_dimensions(observations);
+        if (action.size() != kActionDim) {
+            throw std::runtime_error("DoublePendulumGaussianPolicy expected action size 2");
+        }
+        const auto mu = mean_action(observations);
+        const double variance = sigma * sigma;
+        std::vector<double> grad(kActionDim);
+        for (std::size_t i = 0; i < kActionDim; ++i) {
+            grad[i] = (action[i] - mu[i]) / variance;
+        }
+        return grad;
+    }
+
     std::vector<std::vector<double>> weights =
         std::vector<std::vector<double>>(kActionDim, std::vector<double>(kObservationDim, 0.0));
     std::vector<double> bias = std::vector<double>(kActionDim, 0.0);
