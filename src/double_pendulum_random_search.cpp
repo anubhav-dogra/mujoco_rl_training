@@ -1,5 +1,5 @@
 #include <mujoco_rl_training/DoublePendulumLinearPolicy.h>
-#include <mujoco_rl_training/DoublePendulumEnv.h>
+#include <envs/DoublePendulumEnv.h>
 #include <mujoco_rl_training/DoublePendulumPolicyMetadata.h>
 #include <mujoco_rl_training/RolloutUtils.h>
 #include <mujoco_rl_training/PolicyIO.h>

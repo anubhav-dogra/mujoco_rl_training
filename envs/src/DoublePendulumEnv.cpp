@@ -1,4 +1,4 @@
-#include <mujoco_rl_training/DoublePendulumEnv.h>
+#include <envs/DoublePendulumEnv.h>
 #include <mujoco_core/MujocoSimCore.h>
 #include <cstddef>
 #include <memory>
@@ -32,6 +32,13 @@ DoublePendulumEnv::DoublePendulumEnv(const DoublePendulumEnvConfig& config)
     }
     if (config_.angle_cost_weights.size() != config_.joint_names.size()) {
         throw std::runtime_error("DoublePendulumEnv: angle_cost_weights size must match joint_names size.");
+    }
+    if (!config_.target_link_angles.empty() && config_.target_link_angles.size() != config_.joint_names.size()) {
+        throw std::runtime_error("DoublePendulumEnv: target_link_angles size must match joint_names size.");
+    }
+    if (!config_.link_angle_cost_weights.empty() &&
+        config_.link_angle_cost_weights.size() != config_.joint_names.size()) {
+        throw std::runtime_error("DoublePendulumEnv: link_angle_cost_weights size must match joint_names size.");
     }
     if (config_.velocity_cost_weights.size() != config_.joint_names.size()) {
         throw std::runtime_error("DoublePendulumEnv: velocity_cost_weights size must match joint_names size.");
@@ -68,8 +75,18 @@ DoublePendulumEnv::DoublePendulumEnv(const DoublePendulumEnvConfig& config)
 DoublePendulumEnv::~DoublePendulumEnv() = default;
 
 std::vector<double> DoublePendulumEnv::reset() {
-    std::uniform_real_distribution<double> theta_dist(-config_.reset_angle_range, config_.reset_angle_range);
-    std::uniform_real_distribution<double> theta_dot_dist(-config_.reset_velocity_range, config_.reset_velocity_range);
+    return reset_around(std::vector<double>(config_.joint_names.size(), 0.0), config_.reset_angle_range,
+                        config_.reset_velocity_range);
+}
+
+std::vector<double> DoublePendulumEnv::reset_around(const std::vector<double>& angle_centers, double angle_range,
+                                                    double velocity_range) {
+    if (angle_centers.size() != pos_indices_.size()) {
+        throw std::runtime_error("DoublePendulumEnv: reset angle center size must match joint count.");
+    }
+
+    std::uniform_real_distribution<double> theta_dist(-angle_range, angle_range);
+    std::uniform_real_distribution<double> theta_dot_dist(-velocity_range, velocity_range);
 
     {
         std::lock_guard<std::recursive_mutex> lock(sim_core_->state_mutex());
@@ -78,7 +95,7 @@ std::vector<double> DoublePendulumEnv::reset() {
             sim_core_->set_effort_command(control_indices_[i], 0.0);
         }
         for (size_t i = 0; i < pos_indices_.size(); ++i) {
-            sim_core_->data()->qpos[pos_indices_[i]] = theta_dist(rng_);
+            sim_core_->data()->qpos[pos_indices_[i]] = angle_centers[i] + theta_dist(rng_);
             sim_core_->data()->qvel[vel_indices_[i]] = theta_dot_dist(rng_);
         }
         mj_forward(sim_core_->model(), sim_core_->data());
@@ -107,6 +124,29 @@ MujocoSimCore& DoublePendulumEnv::sim_core() { return *sim_core_; }
 const MujocoSimCore& DoublePendulumEnv::sim_core() const { return *sim_core_; }
 
 const DoublePendulumEnvConfig& DoublePendulumEnv::config() const { return config_; }
+
+void DoublePendulumEnv::set_training_weights(const std::vector<double>& angle_cost_weights,
+                                             const std::vector<double>& velocity_cost_weights,
+                                             const std::vector<double>& control_cost_weights,
+                                             const std::vector<double>& max_torques,
+                                             const std::vector<double>& link_angle_cost_weights) {
+    const auto expected_size = config_.joint_names.size();
+    if (angle_cost_weights.size() != expected_size || velocity_cost_weights.size() != expected_size ||
+        control_cost_weights.size() != expected_size || max_torques.size() != expected_size) {
+        throw std::runtime_error("DoublePendulumEnv: training weight vectors must match joint count.");
+    }
+    if (!link_angle_cost_weights.empty() && link_angle_cost_weights.size() != expected_size) {
+        throw std::runtime_error("DoublePendulumEnv: link angle cost weights must match joint count.");
+    }
+
+    config_.angle_cost_weights = angle_cost_weights;
+    config_.velocity_cost_weights = velocity_cost_weights;
+    config_.control_cost_weights = control_cost_weights;
+    config_.max_torques = max_torques;
+    if (!link_angle_cost_weights.empty()) {
+        config_.link_angle_cost_weights = link_angle_cost_weights;
+    }
+}
 
 DoublePendulumStepResult DoublePendulumEnv::step(const std::vector<double>& action) {
     if (action.size() != control_indices_.size()) {
@@ -154,9 +194,15 @@ double DoublePendulumEnv::compute_reward(const std::vector<double>& theta, const
     }
 
     double cost = 0.0;
+    double link_angle = 0.0;
     for (std::size_t i = 0; i < config_.joint_names.size(); ++i) {
         const double angle_error = normalize_angle(theta[i] - config_.target_angles[i]);
         cost += config_.angle_cost_weights[i] * angle_error * angle_error;
+        if (!config_.target_link_angles.empty() && !config_.link_angle_cost_weights.empty()) {
+            link_angle += theta[i];
+            const double link_angle_error = normalize_angle(link_angle - config_.target_link_angles[i]);
+            cost += config_.link_angle_cost_weights[i] * link_angle_error * link_angle_error;
+        }
         cost += config_.velocity_cost_weights[i] * theta_dot[i] * theta_dot[i];
         cost += config_.control_cost_weights[i] * action[i] * action[i];
     }

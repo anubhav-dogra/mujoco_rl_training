@@ -1,4 +1,4 @@
-#include <mujoco_rl_training/PendulumEnv.h>
+#include <envs/PendulumEnv.h>
 #include <mujoco_rl_training/PendulumGaussianPolicy.h>
 #include <mujoco_rl_training/PendulumPolicyMetadata.h>
 #include <mujoco_rl_training/PolicyIO.h>

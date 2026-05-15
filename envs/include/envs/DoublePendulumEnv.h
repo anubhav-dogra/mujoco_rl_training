@@ -21,6 +21,8 @@ struct DoublePendulumEnvConfig {
     std::vector<std::string> joint_names{};
     std::vector<double> target_angles{};
     std::vector<double> angle_cost_weights{};
+    std::vector<double> target_link_angles{};
+    std::vector<double> link_angle_cost_weights{};
     std::vector<double> velocity_cost_weights{};
     std::vector<double> control_cost_weights{};
 };
@@ -38,6 +40,13 @@ class DoublePendulumEnv {
     DoublePendulumStepResult step(const std::vector<double>& actions);
     std::vector<double> observation() const;
     std::vector<double> reset();
+    std::vector<double> reset_around(const std::vector<double>& angle_centers, double angle_range,
+                                     double velocity_range);
+    void set_training_weights(const std::vector<double>& angle_cost_weights,
+                              const std::vector<double>& velocity_cost_weights,
+                              const std::vector<double>& control_cost_weights,
+                              const std::vector<double>& max_torques,
+                              const std::vector<double>& link_angle_cost_weights = {});
     const DoublePendulumEnvConfig& config() const;
     MujocoSimCore& sim_core();
     const MujocoSimCore& sim_core() const;

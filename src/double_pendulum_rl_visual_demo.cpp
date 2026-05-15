@@ -1,4 +1,4 @@
-#include <mujoco_rl_training/DoublePendulumEnv.h>
+#include <envs/DoublePendulumEnv.h>
 #include <mujoco_rl_training/VisualDemoUtils.h>
 
 #include <ament_index_cpp/get_package_share_directory.hpp>

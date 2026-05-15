@@ -1,6 +1,6 @@
 #pragma once
 
-#include <mujoco_rl_training/DoublePendulumEnv.h>
+#include <envs/DoublePendulumEnv.h>
 #include <mujoco_rl_training/PolicyIO.h>
 
 #include <algorithm>
@@ -132,6 +132,8 @@ inline void save_double_pendulum_policy_metadata(const std::string& metadata_pat
     detail::write_vector(output, "joint_names", config.joint_names);
     detail::write_vector(output, "target_angles", config.target_angles);
     detail::write_vector(output, "angle_cost_weights", config.angle_cost_weights);
+    detail::write_vector(output, "target_link_angles", config.target_link_angles);
+    detail::write_vector(output, "link_angle_cost_weights", config.link_angle_cost_weights);
     detail::write_vector(output, "velocity_cost_weights", config.velocity_cost_weights);
     detail::write_vector(output, "control_cost_weights", config.control_cost_weights);
     detail::write_vector(output, "max_torques", config.max_torques);
@@ -167,6 +169,12 @@ inline std::optional<DoublePendulumPolicyMetadata> load_double_pendulum_policy_m
     loaded.config.joint_names = detail::parse_string_vector(value("joint_names"), "joint_names");
     loaded.config.target_angles = detail::parse_double_vector(value("target_angles"), "target_angles");
     loaded.config.angle_cost_weights = detail::parse_double_vector(value("angle_cost_weights"), "angle_cost_weights");
+    if (const auto it = metadata.find("target_link_angles"); it != metadata.end()) {
+        loaded.config.target_link_angles = detail::parse_double_vector(it->second, "target_link_angles");
+    }
+    if (const auto it = metadata.find("link_angle_cost_weights"); it != metadata.end()) {
+        loaded.config.link_angle_cost_weights = detail::parse_double_vector(it->second, "link_angle_cost_weights");
+    }
     loaded.config.velocity_cost_weights =
         detail::parse_double_vector(value("velocity_cost_weights"), "velocity_cost_weights");
     loaded.config.control_cost_weights =

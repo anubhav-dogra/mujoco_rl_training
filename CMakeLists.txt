@@ -29,6 +29,7 @@ endif()
 function(target_mujoco_include_dirs target)
   target_include_directories(${target} PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/envs/include>
     $<BUILD_INTERFACE:${MUJOCO_PATH}/include/mujoco>
     $<BUILD_INTERFACE:${MUJOCO_PATH}/include>
     $<INSTALL_INTERFACE:include>
@@ -68,8 +69,8 @@ function(add_rl_viewer_executable target source)
 endfunction()
 
 add_library(mujoco_rl_training SHARED
-  src/PendulumEnv.cpp
-  src/DoublePendulumEnv.cpp
+  envs/src/PendulumEnv.cpp
+  envs/src/DoublePendulumEnv.cpp
 )
 target_mujoco_include_dirs(mujoco_rl_training)
 target_link_libraries(mujoco_rl_training
@@ -103,6 +104,15 @@ install(
   TARGETS ${RL_EXECUTABLE_TARGETS}
   RUNTIME DESTINATION lib/${PROJECT_NAME}
 )
+
+install(
+  DIRECTORY
+    include/
+    envs/include/
+  DESTINATION include
+)
+
+ament_export_include_directories(include)
 
 if(BUILD_TESTING)
   find_package(ament_lint_auto REQUIRED)

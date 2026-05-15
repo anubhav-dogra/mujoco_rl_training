@@ -1,4 +1,4 @@
-#include <mujoco_rl_training/DoublePendulumEnv.h>
+#include <envs/DoublePendulumEnv.h>
 #include <mujoco_rl_training/DoublePendulumGaussianPolicy.hpp>
 #include <mujoco_rl_training/DoublePendulumLinearPolicy.h>
 #include <mujoco_rl_training/DoublePendulumPolicyMetadata.h>
