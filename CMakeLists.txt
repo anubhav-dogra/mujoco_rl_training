@@ -13,6 +13,7 @@ find_package(ament_cmake REQUIRED)
 find_package(ament_index_cpp REQUIRED)
 find_package(mujoco_core REQUIRED)
 find_package(mujoco_viewer REQUIRED)
+find_package(Torch REQUIRED)
 
 if(DEFINED ENV{MUJOCO_PATH} AND NOT "$ENV{MUJOCO_PATH}" STREQUAL "")
   set(MUJOCO_PATH "$ENV{MUJOCO_PATH}")
@@ -68,6 +69,18 @@ function(add_rl_viewer_executable target source)
   set(RL_EXECUTABLE_TARGETS "${RL_EXECUTABLE_TARGETS}" PARENT_SCOPE)
 endfunction()
 
+# building torch examples with dependencies and linking with Torch libraries
+function(add_torch_example target source)
+  add_executable(${target} ${source})
+  target_include_directories(${target} PRIVATE
+    ${TORCH_INCLUDE_DIRS}
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+  )
+  target_link_libraries(${target} PRIVATE "${TORCH_LIBRARIES}")
+  list(APPEND EXAMPLE_EXECUTABLE_TARGETS ${target})
+  set(EXAMPLE_EXECUTABLE_TARGETS "${EXAMPLE_EXECUTABLE_TARGETS}" PARENT_SCOPE)
+endfunction()
+
 add_library(mujoco_rl_training SHARED
   envs/src/PendulumEnv.cpp
   envs/src/DoublePendulumEnv.cpp
@@ -93,6 +106,15 @@ add_rl_viewer_executable(double_pendulum_rl_visual_demo src/double_pendulum_rl_v
 add_rl_viewer_executable(pendulum_policy_rollout src/pendulum_policy_rollout.cpp)
 add_rl_viewer_executable(double_pendulum_policy_rollout src/double_pendulum_policy_rollout.cpp)
 
+set(EXAMPLE_EXECUTABLE_TARGETS)
+add_torch_example(torch_tensor_basics examples/torch_tensor_basics.cpp)
+add_torch_example(torch_autograd_basics examples/torch_autograd_basics.cpp)
+add_torch_example(torch_manual_grad_descent examples/torch_manual_grad_descent.cpp)
+add_torch_example(torch_linear_regression_with_opt examples/torch_linear_regression_with_opt.cpp)
+add_torch_example(torch_mlp_critic examples/torch_mlp_critic.cpp)
+add_torch_example(torch_gaussian_actor examples/torch_gaussian_actor.cpp)
+add_torch_example(torch_gaussian_log_prob examples/torch_gaussian_log_prob.cpp)
+
 install(
   TARGETS mujoco_rl_training
   LIBRARY DESTINATION lib
@@ -101,7 +123,9 @@ install(
 )
 
 install(
-  TARGETS ${RL_EXECUTABLE_TARGETS}
+  TARGETS
+    ${RL_EXECUTABLE_TARGETS}
+    ${EXAMPLE_EXECUTABLE_TARGETS}
   RUNTIME DESTINATION lib/${PROJECT_NAME}
 )
 
