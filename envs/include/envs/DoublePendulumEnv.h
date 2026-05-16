@@ -4,6 +4,7 @@
 #include <random>
 #include <vector>
 #include <string>
+#include <mujoco_rl_training/EnvTypes.hpp>
 
 class MujocoSimCore;
 namespace mujoco_rl_training {
@@ -27,25 +28,17 @@ struct DoublePendulumEnvConfig {
     std::vector<double> control_cost_weights{};
 };
 
-struct DoublePendulumStepResult {
-    double reward = 0.0;
-    bool truncated = false;
-    bool terminated = false;
-    std::vector<double> observation{};
-};
-
 class DoublePendulumEnv {
    public:
     explicit DoublePendulumEnv(const DoublePendulumEnvConfig& config);
-    DoublePendulumStepResult step(const std::vector<double>& actions);
+    StepResult step(const std::vector<double>& actions);
     std::vector<double> observation() const;
     std::vector<double> reset();
     std::vector<double> reset_around(const std::vector<double>& angle_centers, double angle_range,
                                      double velocity_range);
     void set_training_weights(const std::vector<double>& angle_cost_weights,
                               const std::vector<double>& velocity_cost_weights,
-                              const std::vector<double>& control_cost_weights,
-                              const std::vector<double>& max_torques,
+                              const std::vector<double>& control_cost_weights, const std::vector<double>& max_torques,
                               const std::vector<double>& link_angle_cost_weights = {});
     const DoublePendulumEnvConfig& config() const;
     MujocoSimCore& sim_core();

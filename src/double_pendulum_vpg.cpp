@@ -3,6 +3,7 @@
 #include <mujoco_rl_training/DoublePendulumLinearPolicy.h>
 #include <mujoco_rl_training/DoublePendulumPolicyMetadata.h>
 #include <mujoco_rl_training/PolicyIO.h>
+#include <mujoco_rl_training/ActionUtils.hpp>
 
 #include <ament_index_cpp/get_package_share_directory.hpp>
 
@@ -19,18 +20,6 @@ namespace {
 
 constexpr double kPi = 3.14159265358979323846;
 const char* kPolicyArtifactPath = "artifacts/double_pendulum_vpg_policy.txt";
-
-std::vector<double> scale_action(const std::vector<double>& normalized_action, const std::vector<double>& max_torques) {
-    if (normalized_action.size() != max_torques.size()) {
-        throw std::runtime_error("Normalized action size must match max_torques size");
-    }
-
-    std::vector<double> action(normalized_action.size(), 0.0);
-    for (std::size_t i = 0; i < normalized_action.size(); ++i) {
-        action[i] = normalized_action[i] * max_torques[i];
-    }
-    return action;
-}
 
 mujoco_rl_training::DoublePendulumLinearPolicy to_physical_mean_policy(
     const mujoco_rl_training::DoublePendulumGaussianPolicy& policy, const std::vector<double>& max_torques) {
@@ -73,7 +62,7 @@ double evaluate_mean_policy(mujoco_rl_training::DoublePendulumEnv& env,
 
         while (true) {
             const auto normalized_action = policy.mean_action(observation);
-            const auto action = scale_action(normalized_action, env.config().max_torques);
+            const auto action = mujoco_rl_training::scale_action(normalized_action, env.config().max_torques);
             const auto result = env.step(action);
             episode_return += result.reward;
             observation = result.observation;
@@ -137,7 +126,7 @@ VpgBatch collect_vpg_batch(mujoco_rl_training::DoublePendulumEnv& env,
 
     while (batch.size() < steps_per_epochs) {
         const auto normalized_action = policy.sample_action(obs, rng);
-        const auto action = scale_action(normalized_action, env.config().max_torques);
+        const auto action = mujoco_rl_training::scale_action(normalized_action, env.config().max_torques);
         const auto value = critic.predict(obs);
 
         const auto result = env.step(action);
@@ -225,9 +214,13 @@ void update_vpg_actor(mujoco_rl_training::DoublePendulumGaussianPolicy& policy, 
     const double max_grad_norm = 1.0;
     double grad_norm_sq = 0.0;
     for (const auto& row : grad_w) {
-        for (double g : row) { grad_norm_sq += g * g; }
+        for (double g : row) {
+            grad_norm_sq += g * g;
+        }
     }
-    for (double g : grad_b) { grad_norm_sq += g * g; }
+    for (double g : grad_b) {
+        grad_norm_sq += g * g;
+    }
     const double grad_norm = std::sqrt(grad_norm_sq);
     const double clip_scale = (grad_norm > max_grad_norm) ? (max_grad_norm / grad_norm) : 1.0;
 

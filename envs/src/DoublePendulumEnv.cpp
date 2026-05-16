@@ -148,7 +148,7 @@ void DoublePendulumEnv::set_training_weights(const std::vector<double>& angle_co
     }
 }
 
-DoublePendulumStepResult DoublePendulumEnv::step(const std::vector<double>& action) {
+StepResult DoublePendulumEnv::step(const std::vector<double>& action) {
     if (action.size() != control_indices_.size()) {
         throw std::runtime_error("DoublePendulumEnv: action size must match joint/control count.");
     }
@@ -177,7 +177,7 @@ DoublePendulumStepResult DoublePendulumEnv::step(const std::vector<double>& acti
         }
     }
 
-    DoublePendulumStepResult result;
+    StepResult result;
     result.reward = compute_reward(theta, theta_dot, clipped_action);
     result.observation = observation();
     ++step_count_;
