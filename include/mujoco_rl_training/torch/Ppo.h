@@ -4,6 +4,7 @@
 #include <mujoco_rl_training/torch/Critic.h>
 #include <mujoco_rl_training/torch/GaussianPolicy.h>
 #include <mujoco_rl_training/torch/TensorUtils.h>
+#include <mujoco_rl_training/rl/TrajectoryUtils.h>
 
 #include <torch/nn/utils/clip_grad.h>
 #include <torch/torch.h>
@@ -56,41 +57,6 @@ struct PpoUpdateStats {
     double approx_kl = 0.0;
     double clip_fraction = 0.0;
 };
-
-inline void compute_gae(PpoBatch& batch, double gamma, double lambda) {
-    batch.advantages.assign(batch.size(), 0.0);
-    batch.returns.assign(batch.size(), 0.0);
-
-    double gae = 0.0;
-    double next_value = batch.bootstrap_value;
-    for (int t = static_cast<int>(batch.size()) - 1; t >= 0; --t) {
-        const std::size_t index = static_cast<std::size_t>(t);
-        const double mask = batch.dones[index] ? 0.0 : 1.0;
-        const double delta = batch.rewards[index] + gamma * next_value * mask - batch.values[index];
-        gae = delta + gamma * lambda * mask * gae;
-        batch.advantages[index] = gae;
-        batch.returns[index] = gae + batch.values[index];
-        next_value = batch.values[index];
-    }
-}
-
-inline void normalize_advantages(PpoBatch& batch) {
-    double sum = 0.0;
-    double sq_sum = 0.0;
-    for (double advantage : batch.advantages) {
-        sum += advantage;
-        sq_sum += advantage * advantage;
-    }
-
-    const double count = static_cast<double>(batch.advantages.size());
-    const double mean = sum / count;
-    const double variance = std::max((sq_sum / count) - mean * mean, 1e-8);
-    const double stddev = std::sqrt(variance);
-
-    for (double& advantage : batch.advantages) {
-        advantage = (advantage - mean) / stddev;
-    }
-}
 
 inline PpoUpdateStats update_ppo(TorchActor& actor, TorchCritic& critic, torch::optim::Adam& actor_optimizer,
                                  torch::optim::Adam& critic_optimizer, const torch::Tensor& log_std,

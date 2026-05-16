@@ -1,4 +1,5 @@
 #pragma once
+
 #include <array>
 #include <cstddef>
 #include <stdexcept>
@@ -6,7 +7,7 @@
 
 namespace mujoco_rl_training {
 struct DoublePendulumLinearPolicy {
-    std::vector<double> action_from_obs(const std::vector<double> &observations) const {
+    std::vector<double> action_from_obs(const std::vector<double>& observations) const {
         if (observations.size() != 6) {
             throw std::runtime_error("observations size is not as double Pendulum");
         }

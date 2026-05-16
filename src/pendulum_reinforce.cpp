@@ -1,7 +1,7 @@
-#include <mujoco_rl_training/PendulumGaussianPolicy.h>
 #include <envs/PendulumEnv.h>
 #include <mujoco_rl_training/PendulumPolicyMetadata.h>
-#include <mujoco_rl_training/PolicyIO.h>
+#include <mujoco_rl_training/artifacts/PolicyArtifacts.h>
+#include <mujoco_rl_training/policies/PendulumGaussianPolicy.h>
 #include <ament_index_cpp/get_package_share_directory.hpp>
 #include <array>
 #include <algorithm>
@@ -14,13 +14,6 @@
 namespace {
 
 const char* kPolicyArtifactPath = "artifacts/pendulum_reinforce_policy.txt";
-
-void save_policy(const mujoco_rl_training::PendulumGaussianPolicy& policy) {
-    auto output = mujoco_rl_training::open_artifact_output(kPolicyArtifactPath);
-
-    output << policy.weights[0] << ' ' << policy.weights[1] << ' ' << policy.weights[2] << ' ' << policy.bias << ' '
-           << policy.sigma << '\n';
-}
 
 double evaluate_mean_policy(mujoco_rl_training::PendulumEnv& env,
                             const mujoco_rl_training::PendulumGaussianPolicy& policy) {
@@ -177,7 +170,7 @@ int main() {
     }
 
     policy = best_policy;
-    save_policy(policy);
+    mujoco_rl_training::save_pendulum_gaussian_policy(kPolicyArtifactPath, policy);
     const auto metadata_path = mujoco_rl_training::pendulum_metadata_path_for_policy(kPolicyArtifactPath);
     mujoco_rl_training::save_pendulum_policy_metadata(
         metadata_path, kPolicyArtifactPath, config, mujoco_rl_training::PendulumPolicyActionScale::PhysicalTorque,

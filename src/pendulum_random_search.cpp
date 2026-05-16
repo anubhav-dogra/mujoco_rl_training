@@ -1,8 +1,8 @@
-#include <mujoco_rl_training/PendulumLinearPolicy.h>
 #include <envs/PendulumEnv.h>
 #include <mujoco_rl_training/RolloutUtils.h>
 #include <mujoco_rl_training/PendulumPolicyMetadata.h>
-#include <mujoco_rl_training/PolicyIO.h>
+#include <mujoco_rl_training/artifacts/PolicyArtifacts.h>
+#include <mujoco_rl_training/policies/PendulumLinearPolicy.h>
 #include <ament_index_cpp/get_package_share_directory.hpp>
 #include <cstddef>
 #include <iostream>
@@ -11,12 +11,6 @@
 namespace {
 
 const char* kPolicyArtifactPath = "artifacts/pendulum_best_policy.txt";
-
-void save_policy(const mujoco_rl_training::PendulumLinearPolicy& policy) {
-    auto output = mujoco_rl_training::open_artifact_output(kPolicyArtifactPath);
-
-    output << policy.weights[0] << ' ' << policy.weights[1] << ' ' << policy.weights[2] << ' ' << policy.bias << '\n';
-}
 
 const auto action_adapter = [](const auto& policy, const auto& observation, auto&) {
     return policy.action_from_obs(observation);
@@ -85,7 +79,7 @@ int main() {
     std::cout << "Best policy weights: [" << best_policy.weights[0] << ", " << best_policy.weights[1] << ", "
               << best_policy.weights[2] << "]" << std::endl;
     std::cout << "Best policy bias: " << best_policy.bias << std::endl;
-    save_policy(best_policy);
+    mujoco_rl_training::save_pendulum_linear_policy(kPolicyArtifactPath, best_policy);
     const auto metadata_path = mujoco_rl_training::pendulum_metadata_path_for_policy(kPolicyArtifactPath);
     mujoco_rl_training::save_pendulum_policy_metadata(metadata_path, kPolicyArtifactPath, config,
                                                       mujoco_rl_training::PendulumPolicyActionScale::PhysicalTorque,

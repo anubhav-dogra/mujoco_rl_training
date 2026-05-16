@@ -37,72 +37,56 @@ function(target_mujoco_include_dirs target)
   )
 endfunction()
 
-function(add_rl_executable target source)
+function(add_rl_target target source)
+  set(options USE_VIEWER USE_TORCH)
+  cmake_parse_arguments(RL_TARGET "${options}" "" "" ${ARGN})
+
   add_executable(${target} ${source})
   target_mujoco_include_dirs(${target})
-  target_link_libraries(${target}
+
+  set(target_libraries
     mujoco_rl_training
     mujoco_core::mujoco_core
   )
-  ament_target_dependencies(${target}
+  set(target_dependencies
     ament_index_cpp
     mujoco_core
   )
-  list(APPEND RL_EXECUTABLE_TARGETS ${target})
-  set(RL_EXECUTABLE_TARGETS "${RL_EXECUTABLE_TARGETS}" PARENT_SCOPE)
+
+  if(RL_TARGET_USE_VIEWER)
+    list(APPEND target_libraries mujoco_viewer::mujoco_viewer)
+    list(APPEND target_dependencies mujoco_viewer)
+  endif()
+
+  if(RL_TARGET_USE_TORCH)
+    target_include_directories(${target} PRIVATE ${TORCH_INCLUDE_DIRS})
+    list(APPEND target_libraries "${TORCH_LIBRARIES}")
+  endif()
+
+  target_link_libraries(${target}
+    ${target_libraries}
+  )
+  ament_target_dependencies(${target}
+    ${target_dependencies}
+  )
+
+  set_property(GLOBAL APPEND PROPERTY RL_EXECUTABLE_TARGETS ${target})
+endfunction()
+
+function(add_rl_executable target source)
+  add_rl_target(${target} ${source})
 endfunction()
 
 function(add_rl_viewer_executable target source)
-  add_executable(${target} ${source})
-  target_mujoco_include_dirs(${target})
-  target_link_libraries(${target}
-    mujoco_rl_training
-    mujoco_viewer::mujoco_viewer
-    mujoco_core::mujoco_core
-  )
-  ament_target_dependencies(${target}
-    ament_index_cpp
-    mujoco_core
-    mujoco_viewer
-  )
-  list(APPEND RL_EXECUTABLE_TARGETS ${target})
-  set(RL_EXECUTABLE_TARGETS "${RL_EXECUTABLE_TARGETS}" PARENT_SCOPE)
+  add_rl_target(${target} ${source} USE_VIEWER)
 endfunction()
 
 function(add_torch_rl_executable target source)
-  add_executable(${target} ${source})
-  target_mujoco_include_dirs(${target})
-  target_include_directories(${target} PRIVATE ${TORCH_INCLUDE_DIRS})
-  target_link_libraries(${target}
-    mujoco_rl_training
-    mujoco_core::mujoco_core
-    "${TORCH_LIBRARIES}"
-  )
-  ament_target_dependencies(${target}
-    ament_index_cpp
-    mujoco_core
-  )
-  list(APPEND RL_EXECUTABLE_TARGETS ${target})
-  set(RL_EXECUTABLE_TARGETS "${RL_EXECUTABLE_TARGETS}" PARENT_SCOPE)
+  add_rl_target(${target} ${source} USE_TORCH)
 endfunction()
 
 function(add_torch_rl_viewer_executable target source)
-  add_executable(${target} ${source})
-  target_mujoco_include_dirs(${target})
-  target_include_directories(${target} PRIVATE ${TORCH_INCLUDE_DIRS})
-  target_link_libraries(${target}
-    mujoco_rl_training
-    mujoco_viewer::mujoco_viewer
-    mujoco_core::mujoco_core
-    "${TORCH_LIBRARIES}"
-  )
-  ament_target_dependencies(${target}
-    ament_index_cpp
-    mujoco_core
-    mujoco_viewer
-  )
-  list(APPEND RL_EXECUTABLE_TARGETS ${target})
-  set(RL_EXECUTABLE_TARGETS "${RL_EXECUTABLE_TARGETS}" PARENT_SCOPE)
+  add_rl_target(${target} ${source} USE_VIEWER USE_TORCH)
 endfunction()
 
 # building torch examples with dependencies and linking with Torch libraries
@@ -112,7 +96,9 @@ function(add_torch_example target source)
     ${TORCH_INCLUDE_DIRS}
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
   )
-  target_link_libraries(${target} PRIVATE "${TORCH_LIBRARIES}")
+  target_link_libraries(${target}
+    "${TORCH_LIBRARIES}"
+  )
   list(APPEND EXAMPLE_EXECUTABLE_TARGETS ${target})
   set(EXAMPLE_EXECUTABLE_TARGETS "${EXAMPLE_EXECUTABLE_TARGETS}" PARENT_SCOPE)
 endfunction()
@@ -129,7 +115,7 @@ ament_target_dependencies(mujoco_rl_training
   mujoco_core
 )
 
-set(RL_EXECUTABLE_TARGETS)
+set_property(GLOBAL PROPERTY RL_EXECUTABLE_TARGETS "")
 add_rl_executable(pendulum_rl_demo src/pendulum_rl_demo.cpp)
 add_rl_executable(pendulum_random_search src/pendulum_random_search.cpp)
 add_rl_executable(double_pendulum_random_search src/double_pendulum_random_search.cpp)
@@ -152,6 +138,8 @@ add_torch_example(torch_linear_regression_with_opt examples/torch_linear_regress
 add_torch_example(torch_mlp_critic examples/torch_mlp_critic.cpp)
 add_torch_example(torch_gaussian_actor examples/torch_gaussian_actor.cpp)
 add_torch_example(torch_gaussian_log_prob examples/torch_gaussian_log_prob.cpp)
+
+get_property(RL_EXECUTABLE_TARGETS GLOBAL PROPERTY RL_EXECUTABLE_TARGETS)
 
 install(
   TARGETS mujoco_rl_training

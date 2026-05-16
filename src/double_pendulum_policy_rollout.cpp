@@ -1,66 +1,19 @@
 #include <envs/DoublePendulumEnv.h>
-#include <mujoco_rl_training/DoublePendulumLinearPolicy.h>
 #include <mujoco_rl_training/DoublePendulumPolicyMetadata.h>
 #include <mujoco_rl_training/VisualDemoUtils.h>
+#include <mujoco_rl_training/artifacts/PolicyLoaders.h>
 
 #include <ament_index_cpp/get_package_share_directory.hpp>
 
 #include <fstream>
 #include <iostream>
-#include <stdexcept>
 #include <string>
-#include <vector>
 
 namespace {
 
 constexpr double kPi = 3.14159265358979323846;
 const char* kDefaultPolicyArtifactPath = "artifacts/double_pendulum_best_policy.txt";
 const char* kLegacyPolicyArtifactPath = "artifacts/double_pendulum_random_search_policy.txt";
-
-struct LoadedPolicy {
-    mujoco_rl_training::DoublePendulumLinearPolicy policy;
-    bool has_sigma = false;
-    std::vector<double> sigma{};
-};
-
-LoadedPolicy load_policy(const std::string& policy_path) {
-    std::ifstream input(policy_path);
-    if (!input.is_open()) {
-        throw std::runtime_error("Failed to open saved policy artifact: " + policy_path);
-    }
-
-    std::vector<double> values;
-    double value = 0.0;
-    while (input >> value) {
-        values.push_back(value);
-    }
-
-    if (!input.eof()) {
-        throw std::runtime_error("Failed while parsing saved policy artifact: " + policy_path);
-    }
-
-    if (values.size() != 14 && values.size() != 16) {
-        throw std::runtime_error("Expected 14-value linear or 16-value Gaussian double pendulum policy artifact: " +
-                                 policy_path);
-    }
-
-    LoadedPolicy loaded_policy;
-    std::size_t value_index = 0;
-    for (auto& row : loaded_policy.policy.weights) {
-        for (double& weight : row) {
-            weight = values[value_index++];
-        }
-    }
-    loaded_policy.policy.bias[0] = values[value_index++];
-    loaded_policy.policy.bias[1] = values[value_index++];
-
-    if (values.size() == 16) {
-        loaded_policy.has_sigma = true;
-        loaded_policy.sigma = {values[value_index++], values[value_index++]};
-    }
-
-    return loaded_policy;
-}
 
 }  // namespace
 
@@ -105,7 +58,7 @@ int main(int argc, char* argv[]) {
         std::cout << "Policy metadata not found, using rollout defaults: " << metadata_path << std::endl;
     }
 
-    const auto loaded_policy = load_policy(policy_path);
+    const auto loaded_policy = mujoco_rl_training::load_double_pendulum_policy(policy_path);
     const auto& policy = loaded_policy.policy;
 
     mujoco_rl_training::DoublePendulumEnv env(config);

@@ -1,28 +1,17 @@
-#include <mujoco_rl_training/DoublePendulumLinearPolicy.h>
 #include <envs/DoublePendulumEnv.h>
 #include <mujoco_rl_training/DoublePendulumPolicyMetadata.h>
 #include <mujoco_rl_training/RolloutUtils.h>
-#include <mujoco_rl_training/PolicyIO.h>
+#include <mujoco_rl_training/artifacts/PolicyArtifacts.h>
+#include <mujoco_rl_training/policies/DoublePendulumLinearPolicy.h>
 
 #include <ament_index_cpp/get_package_share_directory.hpp>
 #include <cmath>
-#include <iomanip>
 #include <iostream>
 #include <random>
 
 namespace {
 const char* kPolicyArtifactPath = "artifacts/double_pendulum_best_policy.txt";
 
-void save_policy(const mujoco_rl_training::DoublePendulumLinearPolicy& policy) {
-    auto output = mujoco_rl_training::open_artifact_output(kPolicyArtifactPath);
-    output << std::setprecision(17);
-    for (const auto& row : policy.weights) {
-        for (double weight : row) {
-            output << weight << ' ';
-        }
-    }
-    output << policy.bias[0] << ' ' << policy.bias[1] << '\n';
-}
 const auto action_adapter = [](const auto& policy, const auto& observation, auto&) {
     return policy.action_from_obs(observation);
 };
@@ -95,7 +84,7 @@ int main() {
     }
 
     std::cout << "Final best return: " << best_return << std::endl;
-    save_policy(best_policy);
+    mujoco_rl_training::save_double_pendulum_linear_policy(kPolicyArtifactPath, best_policy);
     const auto metadata_path = mujoco_rl_training::double_pendulum_metadata_path_for_policy(kPolicyArtifactPath);
     mujoco_rl_training::save_double_pendulum_policy_metadata(metadata_path, kPolicyArtifactPath, config, best_return,
                                                              kNumIterations, kEpisodesPerEvaluation, kNoiseStdDev);

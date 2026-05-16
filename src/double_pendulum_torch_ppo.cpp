@@ -1,28 +1,27 @@
 #include <envs/DoublePendulumEnv.h>
-#include <mujoco_rl_training/DoublePendulumPolicyMetadata.h>
 #include <mujoco_rl_training/torch/GaussianPolicy.h>
 #include <mujoco_rl_training/torch/Ppo.h>
 #include <mujoco_rl_training/torch/TensorUtils.h>
+#include <mujoco_rl_training/torch/TorchArtifacts.h>
 
 #include <ament_index_cpp/get_package_share_directory.hpp>
 #include <torch/torch.h>
 
 #include <algorithm>
 #include <cmath>
-#include <filesystem>
-#include <fstream>
 #include <iostream>
 #include <random>
-#include <stdexcept>
 #include <vector>
 
 namespace {
 
 constexpr double kPi = 3.14159265358979323846;
-const char* kActorArtifactPath = "artifacts/double_pendulum_torch_ppo_actor.pt";
-const char* kCriticArtifactPath = "artifacts/double_pendulum_torch_ppo_critic.pt";
-const char* kLogStdArtifactPath = "artifacts/double_pendulum_torch_ppo_log_std.pt";
-const char* kMetadataArtifactPath = "artifacts/double_pendulum_torch_ppo.meta.txt";
+const mujoco_rl_training::TorchActorCriticArtifactPaths kArtifactPaths{
+    "artifacts/double_pendulum_torch_ppo_actor.pt",
+    "artifacts/double_pendulum_torch_ppo_critic.pt",
+    "artifacts/double_pendulum_torch_ppo_log_std.pt",
+    "artifacts/double_pendulum_torch_ppo.meta.txt",
+};
 
 mujoco_rl_training::DoublePendulumEnvConfig make_env_config() {
     mujoco_rl_training::DoublePendulumEnvConfig config;
@@ -87,32 +86,6 @@ void apply_reward_schedule(mujoco_rl_training::DoublePendulumEnv& env, int epoch
 
 void apply_final_evaluation_weights(mujoco_rl_training::DoublePendulumEnv& env) {
     env.set_training_weights({3.0, 4.0}, {0.12, 0.12}, {0.0015, 0.0018}, {16.0, 12.0}, {1.0, 2.0});
-}
-
-void save_torch_policy_artifacts(mujoco_rl_training::TorchActor& actor, mujoco_rl_training::TorchCritic& critic,
-                                 const torch::Tensor& log_std,
-                                 const mujoco_rl_training::DoublePendulumEnvConfig& config, double best_mean_return,
-                                 int epoch, int episodes_per_evaluation) {
-    std::filesystem::create_directories("artifacts");
-
-    torch::save(actor, kActorArtifactPath);
-    torch::save(critic, kCriticArtifactPath);
-    torch::save(log_std.to(torch::kCPU), kLogStdArtifactPath);
-
-    const double mean_std = torch::exp(log_std).mean().item<double>();
-    mujoco_rl_training::save_double_pendulum_policy_metadata(
-        kMetadataArtifactPath, kActorArtifactPath, config, best_mean_return, epoch, episodes_per_evaluation, mean_std);
-
-    std::ofstream metadata(kMetadataArtifactPath, std::ios::app);
-    if (!metadata.is_open()) {
-        throw std::runtime_error("Failed to open Torch PPO metadata artifact for writing.");
-    }
-
-    metadata << "policy_type=torch_ppo_actor_critic\n";
-    metadata << "actor_path=" << kActorArtifactPath << '\n';
-    metadata << "critic_path=" << kCriticArtifactPath << '\n';
-    metadata << "log_std_path=" << kLogStdArtifactPath << '\n';
-    metadata << "best_epoch=" << epoch << '\n';
 }
 
 double scheduled_std(int epoch, int total_epochs) {
@@ -265,7 +238,9 @@ int main() {
     auto eval_stats = evaluate_mean_policy(env, actor, device, kEpisodesPerEvaluation, evaluation_scenario);
     double best_mean_return = eval_stats.mean_return;
     int epochs_without_improvement = 0;
-    save_torch_policy_artifacts(actor, critic, log_std, env.config(), best_mean_return, -1, kEpisodesPerEvaluation);
+    mujoco_rl_training::save_double_pendulum_torch_actor_critic_policy(
+        actor, critic, log_std, kArtifactPaths, env.config(), best_mean_return, -1, kEpisodesPerEvaluation,
+        "torch_ppo_actor_critic");
     std::cout << "Initial mean-policy return: " << best_mean_return << '\n';
 
     for (int epoch = 0; epoch < kEpochs; ++epoch) {
@@ -287,8 +262,9 @@ int main() {
         if (eval_stats.mean_return > best_mean_return + kCheckpointImprovementThreshold) {
             best_mean_return = eval_stats.mean_return;
             epochs_without_improvement = 0;
-            save_torch_policy_artifacts(actor, critic, log_std, env.config(), best_mean_return, epoch,
-                                        kEpisodesPerEvaluation);
+            mujoco_rl_training::save_double_pendulum_torch_actor_critic_policy(
+                actor, critic, log_std, kArtifactPaths, env.config(), best_mean_return, epoch, kEpisodesPerEvaluation,
+                "torch_ppo_actor_critic");
         } else {
             ++epochs_without_improvement;
         }
@@ -309,9 +285,9 @@ int main() {
     }
 
     std::cout << "Final best mean-policy return: " << best_mean_return << '\n';
-    std::cout << "Saved best actor to: " << kActorArtifactPath << '\n';
-    std::cout << "Saved best critic to: " << kCriticArtifactPath << '\n';
-    std::cout << "Saved log_std to: " << kLogStdArtifactPath << '\n';
-    std::cout << "Saved metadata to: " << kMetadataArtifactPath << '\n';
+    std::cout << "Saved best actor to: " << kArtifactPaths.actor_path << '\n';
+    std::cout << "Saved best critic to: " << kArtifactPaths.critic_path << '\n';
+    std::cout << "Saved log_std to: " << kArtifactPaths.log_std_path << '\n';
+    std::cout << "Saved metadata to: " << kArtifactPaths.metadata_path << '\n';
     return 0;
 }

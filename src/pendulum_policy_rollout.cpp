@@ -1,65 +1,15 @@
 #include <envs/PendulumEnv.h>
-#include <mujoco_rl_training/PendulumLinearPolicy.h>
 #include <mujoco_rl_training/PendulumPolicyMetadata.h>
+#include <mujoco_rl_training/VisualDemoUtils.h>
+#include <mujoco_rl_training/artifacts/PolicyLoaders.h>
 
 #include <ament_index_cpp/get_package_share_directory.hpp>
 
-#include <mujoco/mujoco.h>
-#include <mujoco_viewer/MujocoViewer.h>
-
-#include <atomic>
-#include <chrono>
-#include <cstdlib>
-#include <fstream>
 #include <iostream>
-#include <memory>
-#include <mutex>
-#include <stdexcept>
-#include <thread>
-#include <vector>
 
 namespace {
 
 const char* kDefaultPolicyArtifactPath = "artifacts/pendulum_best_policy.txt";
-
-struct LoadedPolicy {
-    mujoco_rl_training::PendulumLinearPolicy policy;
-    bool has_sigma = false;
-    double sigma = 0.0;
-};
-
-LoadedPolicy load_policy(const std::string& policy_path) {
-    std::ifstream input(policy_path);
-    if (!input.is_open()) {
-        throw std::runtime_error("Failed to open saved policy artifact: " + policy_path);
-    }
-
-    std::vector<double> values;
-    double value = 0.0;
-    while (input >> value) {
-        values.push_back(value);
-    }
-
-    if (!input.eof()) {
-        throw std::runtime_error("Failed while parsing saved policy artifact: " + policy_path);
-    }
-
-    if (values.size() != 4 && values.size() != 5) {
-        throw std::runtime_error("Expected 4-value linear policy or 5-value Gaussian policy artifact: " + policy_path);
-    }
-
-    LoadedPolicy loaded_policy;
-    loaded_policy.policy.weights[0] = values[0];
-    loaded_policy.policy.weights[1] = values[1];
-    loaded_policy.policy.weights[2] = values[2];
-    loaded_policy.policy.bias = values[3];
-    if (values.size() == 5) {
-        loaded_policy.has_sigma = true;
-        loaded_policy.sigma = values[4];
-    }
-
-    return loaded_policy;
-}
 
 }  // namespace
 
@@ -92,7 +42,7 @@ int main(int argc, char* argv[]) {
         std::cout << "Policy metadata not found, assuming physical torque actions: " << metadata_path << "\n";
     }
 
-    const LoadedPolicy loaded_policy = load_policy(policy_path);
+    const auto loaded_policy = mujoco_rl_training::load_pendulum_policy(policy_path);
     const mujoco_rl_training::PendulumLinearPolicy& policy = loaded_policy.policy;
     mujoco_rl_training::PendulumEnv env(config);
     auto observation = env.reset();
@@ -108,76 +58,11 @@ int main(int argc, char* argv[]) {
     std::cout << "Policy weights: [" << policy.weights[0] << ", " << policy.weights[1] << ", " << policy.weights[2]
               << "] bias=" << policy.bias << "\n";
 
-    auto& sim_core = env.sim_core();
-    std::atomic<bool> paused{false};
-    std::atomic<bool> reset_requested{false};
-
-    MujocoViewer viewer;
-    viewer.initialize(*sim_core.model(), false, &paused, &reset_requested);
-    viewer.set_camera_properties({0.0, 0.0, 0.5}, 2.5, 135.0, -30.0, false);
-
-    std::unique_ptr<mjData, void (*)(mjData*)> render_data(mj_makeData(sim_core.model()), mj_deleteData);
-    if (!render_data) {
-        std::cerr << "Failed to allocate MuJoCo render snapshot.\n";
-        return EXIT_FAILURE;
-    }
-
-    std::atomic<bool> run_simulation{true};
-    const auto env_step_period = std::chrono::duration<double>(static_cast<double>(config.repeat_action) /
-                                                               static_cast<double>(config.simulation_frequency));
-    const auto render_period = std::chrono::duration<double>(1.0 / 60.0);
-
-    std::thread simulation_thread([&]() {
-        using clock_type = std::chrono::steady_clock;
-        auto next_tick = clock_type::now();
-
-        while (run_simulation.load(std::memory_order_acquire)) {
-            next_tick += std::chrono::duration_cast<clock_type::duration>(env_step_period);
-
-            if (reset_requested.exchange(false, std::memory_order_acq_rel)) {
-                observation = env.reset();
-                std::cout << "Reset observation: [" << observation[0] << ", " << observation[1] << ", "
-                          << observation[2] << "]\n";
-            }
-
-            if (!paused.load(std::memory_order_acquire)) {
-                const double policy_action = policy.action_from_obs(observation);
-                const double action =
-                    mujoco_rl_training::pendulum_physical_action(policy_action, action_scale, config.max_torque);
-                const auto result = env.step(action);
-                observation = result.observation;
-
-                if (result.terminated || result.truncated) {
-                    observation = env.reset();
-                    std::cout << "Episode reset observation: [" << observation[0] << ", " << observation[1] << ", "
-                              << observation[2] << "]\n";
-                }
-            }
-
-            std::this_thread::sleep_until(next_tick);
-            const auto now = clock_type::now();
-            if (now > next_tick + std::chrono::duration_cast<clock_type::duration>(env_step_period)) {
-                next_tick = now;
-            }
-        }
-    });
-
-    while (!viewer.should_close()) {
-        const auto frame_start = std::chrono::steady_clock::now();
-
-        {
-            std::lock_guard<std::recursive_mutex> lock(sim_core.state_mutex());
-            mj_copyData(render_data.get(), sim_core.model(), sim_core.data());
-        }
-
-        viewer.update_scene(*render_data);
-        viewer.present();
-
-        std::this_thread::sleep_until(frame_start + render_period);
-    }
-
-    run_simulation.store(false, std::memory_order_release);
-    simulation_thread.join();
-
-    return EXIT_SUCCESS;
+    return mujoco_rl_training::run_visual_demo(
+        env, observation,
+        [&]() {
+            const double policy_action = policy.action_from_obs(observation);
+            return mujoco_rl_training::pendulum_physical_action(policy_action, action_scale, config.max_torque);
+        },
+        {{0.0, 0.0, 0.5}, 2.5, 135.0, -30.0});
 }

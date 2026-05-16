@@ -3,7 +3,7 @@
 /log
 /.pixi
 /.cache
-artifacts/
+/artifacts/
 compile_commands.json
 .DS_Store
 .vscode/

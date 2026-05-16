@@ -1,4 +1,5 @@
 #pragma once
+
 #include <array>
 
 namespace mujoco_rl_training {

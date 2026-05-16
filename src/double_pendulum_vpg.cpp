@@ -1,17 +1,17 @@
 #include <envs/DoublePendulumEnv.h>
-#include <mujoco_rl_training/DoublePendulumGaussianPolicy.hpp>
-#include <mujoco_rl_training/DoublePendulumLinearPolicy.h>
 #include <mujoco_rl_training/DoublePendulumPolicyMetadata.h>
-#include <mujoco_rl_training/PolicyIO.h>
 #include <mujoco_rl_training/ActionUtils.hpp>
 #include <mujoco_rl_training/RolloutUtils.h>
+#include <mujoco_rl_training/artifacts/PolicyArtifacts.h>
+#include <mujoco_rl_training/policies/DoublePendulumGaussianPolicy.hpp>
+#include <mujoco_rl_training/policies/DoublePendulumLinearPolicy.h>
+#include <mujoco_rl_training/rl/TrajectoryUtils.h>
 
 #include <ament_index_cpp/get_package_share_directory.hpp>
 
 #include <algorithm>
 #include <cmath>
 #include <cstddef>
-#include <iomanip>
 #include <iostream>
 #include <random>
 #include <stdexcept>
@@ -37,20 +37,6 @@ mujoco_rl_training::DoublePendulumLinearPolicy to_physical_mean_policy(
         physical_policy.bias[action_index] = max_torques[action_index] * policy.bias[action_index];
     }
     return physical_policy;
-}
-
-void save_policy(const mujoco_rl_training::DoublePendulumGaussianPolicy& policy,
-                 const mujoco_rl_training::DoublePendulumEnvConfig& config) {
-    const auto physical_policy = to_physical_mean_policy(policy, config.max_torques);
-    auto output = mujoco_rl_training::open_artifact_output(kPolicyArtifactPath);
-    output << std::setprecision(17);
-
-    for (const auto& row : physical_policy.weights) {
-        for (double weight : row) {
-            output << weight << ' ';
-        }
-    }
-    output << physical_policy.bias[0] << ' ' << physical_policy.bias[1] << '\n';
 }
 
 const auto mean_action_adapter = [](const auto& policy, const auto& observation, const auto& env) {
@@ -124,53 +110,6 @@ VpgBatch collect_vpg_batch(mujoco_rl_training::DoublePendulumEnv& env,
     return batch;
 }
 
-void compute_gae(VpgBatch& batch, double gamma, double lambda) {
-    batch.advantages.assign(batch.size(), 0.0);
-    batch.returns.assign(batch.size(), 0.0);
-
-    if (batch.size() == 0) {
-        return;
-    }
-    double gae = 0.0;
-    double next_value = batch.bootstrap_value;
-    for (int t = static_cast<int>(batch.size()) - 1; t >= 0; --t) {
-        const std::size_t index = static_cast<std::size_t>(t);
-        const double mask = batch.dones[index] ? 0.0 : 1.0;
-        // delta_t = r_t + gamma * V(s_{t+1}) - V(s_t)
-        const double delta = batch.rewards[index] + (gamma * next_value * mask) - batch.values[index];
-        /*advantage_t = delta_t + gamma * lambda * delta_{t+1}*/
-        /*              + (gamma * lambda)^2 * delta_{t+2}*/
-        /*              + ...*/
-        gae = delta + gamma * lambda * mask * gae;
-        batch.advantages[index] = gae;
-        batch.returns[index] = gae + batch.values[index];
-
-        next_value = batch.values[index];
-    }
-}
-void normalize_advantages(VpgBatch& batch) {
-    if (batch.advantages.empty()) {
-        return;
-    }
-
-    double sum = 0.0;
-    double sq_sum = 0.0;
-
-    for (double advantage : batch.advantages) {
-        sum += advantage;
-        sq_sum += advantage * advantage;
-    }
-
-    const double count = static_cast<double>(batch.advantages.size());
-    const double mean = sum / count;
-    const double variance = (sq_sum / count) - (mean * mean);
-    const double stddev = std::sqrt(std::max(variance, 1e-8));
-
-    for (double& advantage : batch.advantages) {
-        advantage = (advantage - mean) / stddev;
-    }
-}
-
 void update_vpg_actor(mujoco_rl_training::DoublePendulumGaussianPolicy& policy, const VpgBatch& batch,
                       double learning_rate) {
     std::vector<std::vector<double>> grad_w(policy.weights.size(), std::vector<double>(policy.weights[0].size(), 0.0));
@@ -240,8 +179,8 @@ void vpg_update(mujoco_rl_training::DoublePendulumGaussianPolicy& policy,
                 std::mt19937& rng, std::size_t steps_per_epoch, double gamma, double lambda, double actor_learning_rate,
                 double critic_learning_rate, int value_train_iters) {
     auto batch = collect_vpg_batch(env, policy, critic, steps_per_epoch, rng);
-    compute_gae(batch, gamma, lambda);
-    normalize_advantages(batch);
+    mujoco_rl_training::compute_gae(batch, gamma, lambda);
+    mujoco_rl_training::normalize_advantages(batch);
     update_vpg_actor(policy, batch, actor_learning_rate);
     update_vpg_critic(critic, batch, critic_learning_rate, value_train_iters);
 }
@@ -314,7 +253,8 @@ int main() {
     }
 
     policy = best_policy;
-    save_policy(policy, config);
+    const auto physical_policy = to_physical_mean_policy(policy, config.max_torques);
+    mujoco_rl_training::save_double_pendulum_linear_policy(kPolicyArtifactPath, physical_policy);
     const auto metadata_path = mujoco_rl_training::double_pendulum_metadata_path_for_policy(kPolicyArtifactPath);
     mujoco_rl_training::save_double_pendulum_policy_metadata(
         metadata_path, kPolicyArtifactPath, config, best_mean_return, kEpochs, kEpisodesPerEvaluation, policy.sigma);
