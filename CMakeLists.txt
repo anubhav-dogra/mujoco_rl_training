@@ -69,6 +69,42 @@ function(add_rl_viewer_executable target source)
   set(RL_EXECUTABLE_TARGETS "${RL_EXECUTABLE_TARGETS}" PARENT_SCOPE)
 endfunction()
 
+function(add_torch_rl_executable target source)
+  add_executable(${target} ${source})
+  target_mujoco_include_dirs(${target})
+  target_include_directories(${target} PRIVATE ${TORCH_INCLUDE_DIRS})
+  target_link_libraries(${target}
+    mujoco_rl_training
+    mujoco_core::mujoco_core
+    "${TORCH_LIBRARIES}"
+  )
+  ament_target_dependencies(${target}
+    ament_index_cpp
+    mujoco_core
+  )
+  list(APPEND RL_EXECUTABLE_TARGETS ${target})
+  set(RL_EXECUTABLE_TARGETS "${RL_EXECUTABLE_TARGETS}" PARENT_SCOPE)
+endfunction()
+
+function(add_torch_rl_viewer_executable target source)
+  add_executable(${target} ${source})
+  target_mujoco_include_dirs(${target})
+  target_include_directories(${target} PRIVATE ${TORCH_INCLUDE_DIRS})
+  target_link_libraries(${target}
+    mujoco_rl_training
+    mujoco_viewer::mujoco_viewer
+    mujoco_core::mujoco_core
+    "${TORCH_LIBRARIES}"
+  )
+  ament_target_dependencies(${target}
+    ament_index_cpp
+    mujoco_core
+    mujoco_viewer
+  )
+  list(APPEND RL_EXECUTABLE_TARGETS ${target})
+  set(RL_EXECUTABLE_TARGETS "${RL_EXECUTABLE_TARGETS}" PARENT_SCOPE)
+endfunction()
+
 # building torch examples with dependencies and linking with Torch libraries
 function(add_torch_example target source)
   add_executable(${target} ${source})
@@ -100,11 +136,13 @@ add_rl_executable(double_pendulum_random_search src/double_pendulum_random_searc
 add_rl_executable(pendulum_reinforce src/pendulum_reinforce.cpp)
 add_rl_executable(pendulum_vpg src/pendulum_vpg.cpp)
 add_rl_executable(double_pendulum_vpg src/double_pendulum_vpg.cpp)
+add_torch_rl_executable(double_pendulum_torch_ppo src/double_pendulum_torch_ppo.cpp)
 
 add_rl_viewer_executable(pendulum_rl_visual_demo src/pendulum_rl_env_visualize.cpp)
 add_rl_viewer_executable(double_pendulum_rl_visual_demo src/double_pendulum_rl_visual_demo.cpp)
 add_rl_viewer_executable(pendulum_policy_rollout src/pendulum_policy_rollout.cpp)
 add_rl_viewer_executable(double_pendulum_policy_rollout src/double_pendulum_policy_rollout.cpp)
+add_torch_rl_viewer_executable(double_pendulum_torch_policy_rollout src/double_pendulum_torch_policy_rollout.cpp)
 
 set(EXAMPLE_EXECUTABLE_TARGETS)
 add_torch_example(torch_tensor_basics examples/torch_tensor_basics.cpp)
