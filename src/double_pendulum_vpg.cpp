@@ -4,6 +4,7 @@
 #include <mujoco_rl_training/DoublePendulumPolicyMetadata.h>
 #include <mujoco_rl_training/PolicyIO.h>
 #include <mujoco_rl_training/ActionUtils.hpp>
+#include <mujoco_rl_training/RolloutUtils.h>
 
 #include <ament_index_cpp/get_package_share_directory.hpp>
 
@@ -52,32 +53,9 @@ void save_policy(const mujoco_rl_training::DoublePendulumGaussianPolicy& policy,
     output << physical_policy.bias[0] << ' ' << physical_policy.bias[1] << '\n';
 }
 
-double evaluate_mean_policy(mujoco_rl_training::DoublePendulumEnv& env,
-                            const mujoco_rl_training::DoublePendulumGaussianPolicy& policy, int episodes) {
-    double total_return = 0.0;
-
-    for (int episode = 0; episode < episodes; ++episode) {
-        auto observation = env.reset();
-        double episode_return = 0.0;
-
-        while (true) {
-            const auto normalized_action = policy.mean_action(observation);
-            const auto action = mujoco_rl_training::scale_action(normalized_action, env.config().max_torques);
-            const auto result = env.step(action);
-            episode_return += result.reward;
-            observation = result.observation;
-
-            if (result.truncated || result.terminated) {
-                break;
-            }
-        }
-
-        total_return += episode_return;
-    }
-
-    return total_return / static_cast<double>(episodes);
-}
-
+const auto mean_action_adapter = [](const auto& policy, const auto& observation, const auto& env) {
+    return mujoco_rl_training::scale_action(policy.mean_action(observation), env.config().max_torques);
+};
 }  // namespace
 
 // struct for a VPGbatch, collecting everything for the full epoch run.
@@ -301,7 +279,8 @@ int main() {
 
     std::mt19937 rng(123);
 
-    double best_mean_return = evaluate_mean_policy(env, policy, kEpisodesPerEvaluation);
+    double best_mean_return =
+        mujoco_rl_training::evaluate_average_return(env, policy, kEpisodesPerEvaluation, mean_action_adapter);
     auto best_policy = policy;
     int epochs_without_improvement = 0;
 
@@ -311,7 +290,8 @@ int main() {
         vpg_update(policy, critic, env, rng, kStepsPerEpoch, kGamma, kLambda, kActorLearningRate, kCriticLearningRate,
                    kValueTrainIters);
 
-        const double mean_return = evaluate_mean_policy(env, policy, kEpisodesPerEvaluation);
+        const double mean_return =
+            mujoco_rl_training::evaluate_average_return(env, policy, kEpisodesPerEvaluation, mean_action_adapter);
         if (mean_return > best_mean_return) {
             best_mean_return = mean_return;
             best_policy = policy;

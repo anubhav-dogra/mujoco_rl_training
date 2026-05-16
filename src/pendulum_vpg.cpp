@@ -2,6 +2,7 @@
 #include <mujoco_rl_training/PendulumGaussianPolicy.h>
 #include <mujoco_rl_training/PendulumPolicyMetadata.h>
 #include <mujoco_rl_training/PolicyIO.h>
+#include <mujoco_rl_training/RolloutUtils.h>
 
 #include <ament_index_cpp/get_package_share_directory.hpp>
 
@@ -24,25 +25,9 @@ void save_policy(const mujoco_rl_training::PendulumGaussianPolicy& policy) {
            << policy.sigma << '\n';
 }
 
-double evaluate_mean_policy(mujoco_rl_training::PendulumEnv& env,
-                            const mujoco_rl_training::PendulumGaussianPolicy& policy) {
-    auto observation = env.reset();
-    double total_return = 0.0;
-
-    while (true) {
-        const double normalized_action = policy.mean_action(observation);
-        const double action = env.config().max_torque * normalized_action;
-        const auto result = env.step(action);
-        total_return += result.reward;
-        observation = result.observation;
-
-        if (result.truncated || result.terminated) {
-            break;
-        }
-    }
-
-    return total_return;
-}
+const auto mean_action_adapter = [](const auto& policy, const auto& observation, const auto& env) {
+    return env.config().max_torque * policy.mean_action(observation);
+};
 }  // namespace
 
 struct VpgBatch {
@@ -232,7 +217,7 @@ int main() {
 
     std::mt19937 rng(123);
 
-    double best_mean_return = evaluate_mean_policy(env, policy);
+    double best_mean_return = mujoco_rl_training::evaluate_episode_return(env, policy, mean_action_adapter);
     auto best_policy = policy;
 
     std::cout << "Initial mean-policy return: " << best_mean_return << std::endl;
@@ -241,7 +226,7 @@ int main() {
         vpg_update(policy, critic, env, rng, kStepsPerEpoch, kGamma, kLambda, kActorLearningRate, kCriticLearningRate,
                    kValueTrainIters);
 
-        const double mean_return = evaluate_mean_policy(env, policy);
+        const double mean_return = mujoco_rl_training::evaluate_episode_return(env, policy, mean_action_adapter);
         if (mean_return > best_mean_return) {
             best_mean_return = mean_return;
             best_policy = policy;

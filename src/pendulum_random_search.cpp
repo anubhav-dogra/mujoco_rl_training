@@ -1,12 +1,12 @@
 #include <mujoco_rl_training/PendulumLinearPolicy.h>
 #include <envs/PendulumEnv.h>
+#include <mujoco_rl_training/RolloutUtils.h>
 #include <mujoco_rl_training/PendulumPolicyMetadata.h>
 #include <mujoco_rl_training/PolicyIO.h>
 #include <ament_index_cpp/get_package_share_directory.hpp>
 #include <cstddef>
 #include <iostream>
 #include <random>
-#include <stdexcept>
 
 namespace {
 
@@ -18,34 +18,11 @@ void save_policy(const mujoco_rl_training::PendulumLinearPolicy& policy) {
     output << policy.weights[0] << ' ' << policy.weights[1] << ' ' << policy.weights[2] << ' ' << policy.bias << '\n';
 }
 
+const auto action_adapter = [](const auto& policy, const auto& observation, auto&) {
+    return policy.action_from_obs(observation);
+};
+
 }  // namespace
-
-double evaluate_episode_return(mujoco_rl_training::PendulumEnv& env,
-                               const mujoco_rl_training::PendulumLinearPolicy& policy) {
-    auto obs = env.reset();
-    double total_reward = 0.0;
-
-    while (true) {
-        const double action = policy.action_from_obs(obs);
-        const auto result = env.step(action);
-        obs = result.observation;
-
-        total_reward += result.reward;
-        if (result.truncated || result.terminated) {
-            break;
-        }
-    }
-    return total_reward;
-}
-
-double evaluate_average_return(mujoco_rl_training::PendulumEnv& env,
-                               const mujoco_rl_training::PendulumLinearPolicy& policy, int num_episodes) {
-    double total_return = 0.0;
-    for (int episode = 0; episode < num_episodes; ++episode) {
-        total_return += evaluate_episode_return(env, policy);
-    }
-    return total_return / static_cast<double>(num_episodes);
-}
 
 int main() {
     mujoco_rl_training::PendulumEnvConfig config;
@@ -63,7 +40,8 @@ int main() {
     constexpr double kNoiseStddev = 1.0;
     constexpr int kLogEvery = 25;
 
-    double best_return = evaluate_average_return(env, best_policy, kEpisodesPerEvaluation);
+    double best_return =
+        mujoco_rl_training::evaluate_average_return(env, best_policy, kEpisodesPerEvaluation, action_adapter);
 
     std::cout << "Initial policy return: " << best_return << std::endl;
 
@@ -82,8 +60,10 @@ int main() {
             negative_policy.weights[i] -= weight_delta;
         }
 
-        const double positive_return = evaluate_average_return(env, positive_policy, kEpisodesPerEvaluation);
-        const double negative_return = evaluate_average_return(env, negative_policy, kEpisodesPerEvaluation);
+        const double positive_return =
+            mujoco_rl_training::evaluate_average_return(env, positive_policy, kEpisodesPerEvaluation, action_adapter);
+        const double negative_return =
+            mujoco_rl_training::evaluate_average_return(env, negative_policy, kEpisodesPerEvaluation, action_adapter);
 
         if (positive_return > best_return || negative_return > best_return) {
             if (positive_return >= negative_return) {
@@ -107,9 +87,9 @@ int main() {
     std::cout << "Best policy bias: " << best_policy.bias << std::endl;
     save_policy(best_policy);
     const auto metadata_path = mujoco_rl_training::pendulum_metadata_path_for_policy(kPolicyArtifactPath);
-    mujoco_rl_training::save_pendulum_policy_metadata(
-        metadata_path, kPolicyArtifactPath, config, mujoco_rl_training::PendulumPolicyActionScale::PhysicalTorque,
-        "random_search", best_return);
+    mujoco_rl_training::save_pendulum_policy_metadata(metadata_path, kPolicyArtifactPath, config,
+                                                      mujoco_rl_training::PendulumPolicyActionScale::PhysicalTorque,
+                                                      "random_search", best_return);
     std::cout << "Saved best policy to: " << kPolicyArtifactPath << std::endl;
     std::cout << "Saved policy metadata to: " << metadata_path << std::endl;
 

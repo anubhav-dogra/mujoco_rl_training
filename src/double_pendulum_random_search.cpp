@@ -10,7 +10,7 @@
 #include <iostream>
 #include <random>
 
-namespace mujoco_rl_training {
+namespace {
 const char* kPolicyArtifactPath = "artifacts/double_pendulum_best_policy.txt";
 
 void save_policy(const mujoco_rl_training::DoublePendulumLinearPolicy& policy) {
@@ -23,7 +23,10 @@ void save_policy(const mujoco_rl_training::DoublePendulumLinearPolicy& policy) {
     }
     output << policy.bias[0] << ' ' << policy.bias[1] << '\n';
 }
-}  // namespace mujoco_rl_training
+const auto action_adapter = [](const auto& policy, const auto& observation, auto&) {
+    return policy.action_from_obs(observation);
+};
+}  // namespace
 
 int main() {
     mujoco_rl_training::DoublePendulumEnvConfig config;
@@ -46,7 +49,8 @@ int main() {
     constexpr int kEpisodesPerEvaluation = 20;
     constexpr double kNoiseStdDev = 0.5;
     constexpr int kLogEvery = 25;
-    double best_return = mujoco_rl_training::evaluate_average_return(env, best_policy, kEpisodesPerEvaluation);
+    double best_return =
+        mujoco_rl_training::evaluate_average_return(env, best_policy, kEpisodesPerEvaluation, action_adapter);
 
     std::cout << "Initial Policy Return: " << best_return << std::endl;
 
@@ -70,9 +74,9 @@ int main() {
         }
 
         const double positive_return =
-            mujoco_rl_training::evaluate_average_return(env, positive_policy, kEpisodesPerEvaluation);
+            mujoco_rl_training::evaluate_average_return(env, positive_policy, kEpisodesPerEvaluation, action_adapter);
         const double negative_return =
-            mujoco_rl_training::evaluate_average_return(env, negative_policy, kEpisodesPerEvaluation);
+            mujoco_rl_training::evaluate_average_return(env, negative_policy, kEpisodesPerEvaluation, action_adapter);
 
         if (positive_return > best_return || negative_return > best_return) {
             if (positive_return >= negative_return) {
@@ -92,12 +96,10 @@ int main() {
 
     std::cout << "Final best return: " << best_return << std::endl;
     save_policy(best_policy);
-    const auto metadata_path =
-        mujoco_rl_training::double_pendulum_metadata_path_for_policy(mujoco_rl_training::kPolicyArtifactPath);
-    mujoco_rl_training::save_double_pendulum_policy_metadata(metadata_path, mujoco_rl_training::kPolicyArtifactPath,
-                                                             config, best_return, kNumIterations,
-                                                             kEpisodesPerEvaluation, kNoiseStdDev);
-    std::cout << "Saved best policy to: " << mujoco_rl_training::kPolicyArtifactPath << std::endl;
+    const auto metadata_path = mujoco_rl_training::double_pendulum_metadata_path_for_policy(kPolicyArtifactPath);
+    mujoco_rl_training::save_double_pendulum_policy_metadata(metadata_path, kPolicyArtifactPath, config, best_return,
+                                                             kNumIterations, kEpisodesPerEvaluation, kNoiseStdDev);
+    std::cout << "Saved best policy to: " << kPolicyArtifactPath << std::endl;
     std::cout << "Saved policy metadata to: " << metadata_path << std::endl;
 
     return 0;
