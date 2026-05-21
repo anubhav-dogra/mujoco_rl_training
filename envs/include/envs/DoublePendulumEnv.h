@@ -28,14 +28,14 @@ struct DoublePendulumEnvConfig {
     std::vector<double> control_cost_weights{};
 };
 
-class DoublePendulumEnv {
+class DoublePendulumEnv : public EnvInterface {
    public:
     explicit DoublePendulumEnv(const DoublePendulumEnvConfig& config);
-    StepResult step(const std::vector<double>& actions);
-    std::vector<double> observation() const;
-    std::vector<double> reset();
-    std::vector<double> reset_around(const std::vector<double>& angle_centers, double angle_range,
-                                     double velocity_range);
+    StepResult step(const std::vector<double>& actions) override;
+    std::vector<double> observation() const override;
+    std::vector<double> reset() override;
+    std::vector<double> reset(const ResetSpace& reset_space) override;
+    const EnvSpec& env_spec() const override;
     void set_training_weights(const std::vector<double>& angle_cost_weights,
                               const std::vector<double>& velocity_cost_weights,
                               const std::vector<double>& control_cost_weights, const std::vector<double>& max_torques,
@@ -51,6 +51,7 @@ class DoublePendulumEnv {
                           const std::vector<double>& action) const;
     double normalize_angle(double angle) const;
     DoublePendulumEnvConfig config_;
+    EnvSpec env_spec_;
     std::unique_ptr<MujocoSimCore> sim_core_;
     std::vector<std::size_t> pos_indices_;
     std::vector<std::size_t> vel_indices_;

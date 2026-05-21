@@ -12,7 +12,7 @@
 #include <iostream>
 #include <random>
 #include <vector>
-
+#include <envs/EnvTypes.hpp>
 namespace {
 
 constexpr double kPi = 3.14159265358979323846;
@@ -43,32 +43,12 @@ mujoco_rl_training::DoublePendulumEnvConfig make_env_config() {
     return config;
 }
 
-struct ResetScenario {
-    std::vector<double> angle_centers;
-    double angle_range = 0.0;
-    double velocity_range = 0.0;
-};
-
-std::vector<ResetScenario> make_training_scenarios() {
+std::vector<mujoco_rl_training::ResetSpace> make_training_scenarios() {
     return {
-        {{kPi, 0.0}, 0.25, 0.5},       {{kPi, 0.0}, 0.6, 1.5},  {{0.5 * kPi, 0.0}, 0.6, 4.0},
-        {{-0.5 * kPi, 0.0}, 0.6, 4.0}, {{0.0, 0.0}, 0.35, 2.0}, {{0.0, 0.0}, kPi, 4.0},
-    };
-}
-
-std::vector<double> reset_from_scenario(mujoco_rl_training::DoublePendulumEnv& env, const ResetScenario& scenario) {
-    return env.reset_around(scenario.angle_centers, scenario.angle_range, scenario.velocity_range);
-}
-
-std::vector<double> reset_from_random_scenario(mujoco_rl_training::DoublePendulumEnv& env,
-                                               const std::vector<ResetScenario>& scenarios, std::mt19937& rng) {
-    if (scenarios.empty()) {
-        return env.reset();
-    }
-
-    std::uniform_int_distribution<std::size_t> scenario_dist(0, scenarios.size() - 1);
-    return reset_from_scenario(env, scenarios[scenario_dist(rng)]);
-}
+        {{kPi, 0.0}, {0.25, 0.25}, {0.0, 0.0}, {0.5, 0.5}},     {{kPi, 0.0}, {0.6, 0.6}, {0.0, 0.0}, {1.5, 1.5}},
+        {{0.5 * kPi, 0.0}, {0.6, 0.6}, {0.0, 0.0}, {4.0, 4.0}}, {{-0.5 * kPi, 0.0}, {0.6, 0.6}, {0.0, 0.0}, {4.0, 4.0}},
+        {{0.0, 0.0}, {0.35, 0.35}, {0.0, 0.0}, {2.0, 2.0}},     {{0.0, 0.0}, {kPi, kPi}, {0.0, 0.0}, {4.0, 4.0}}};
+};
 
 void apply_reward_schedule(mujoco_rl_training::DoublePendulumEnv& env, int epoch) {
     if (epoch < 25) {
@@ -96,109 +76,12 @@ double scheduled_std(int epoch, int total_epochs) {
     return kStartStd + (kEndStd - kStartStd) * progress;
 }
 
-double critic_value(mujoco_rl_training::TorchCritic& critic, const std::vector<double>& observation,
-                    const torch::Device& device) {
-    torch::NoGradGuard no_grad;
-    const auto obs = mujoco_rl_training::vector_to_tensor(observation, device, true);
-    return critic->forward(obs).item<double>();
-}
-
-mujoco_rl_training::PpoBatch collect_batch(mujoco_rl_training::DoublePendulumEnv& env,
-                                           mujoco_rl_training::TorchActor& actor,
-                                           mujoco_rl_training::TorchCritic& critic, const torch::Tensor& log_std,
-                                           const torch::Device& device, std::size_t steps_per_epoch,
-                                           double reward_scale, const std::vector<ResetScenario>& reset_scenarios,
-                                           std::mt19937& reset_rng) {
-    mujoco_rl_training::PpoBatch batch;
-    batch.reserve(steps_per_epoch);
-
-    auto observation = reset_from_random_scenario(env, reset_scenarios, reset_rng);
-    std::vector<double> last_next_observation = observation;
-    bool last_done = false;
-
-    actor->eval();
-    critic->eval();
-
-    while (batch.size() < steps_per_epoch) {
-        torch::NoGradGuard no_grad;
-        const auto obs_tensor = mujoco_rl_training::vector_to_tensor(observation, device, true);
-        const auto mean = actor->forward(obs_tensor);
-        const auto raw_action = mujoco_rl_training::sample_gaussian_action(mean, log_std).detach();
-        const auto normalized_action = mujoco_rl_training::squash_action(raw_action);
-        const auto old_log_prob = mujoco_rl_training::squashed_gaussian_log_prob(raw_action, mean, log_std);
-        const auto value = critic->forward(obs_tensor).item<double>();
-
-        const auto action_command =
-            mujoco_rl_training::scale_action(normalized_action.squeeze(0), env.config().max_torques);
-        const auto result = env.step(action_command);
-        const bool done = result.terminated || result.truncated;
-
-        batch.store(observation, mujoco_rl_training::tensor_to_vector(raw_action.squeeze(0)),
-                    old_log_prob.item<double>(), reward_scale * result.reward, value, done);
-        last_next_observation = result.observation;
-        last_done = done;
-        observation = result.observation;
-
-        if (done) {
-            observation = reset_from_random_scenario(env, reset_scenarios, reset_rng);
-        }
-    }
-
-    batch.bootstrap_value = last_done ? 0.0 : critic_value(critic, last_next_observation, device);
-    actor->train();
-    critic->train();
-
-    return batch;
-}
-
-struct EvaluationStats {
-    double mean_return = 0.0;
-};
-
-EvaluationStats evaluate_mean_policy(mujoco_rl_training::DoublePendulumEnv& env, mujoco_rl_training::TorchActor& actor,
-                                     const torch::Device& device, int episodes, const ResetScenario& reset_scenario) {
-    torch::NoGradGuard no_grad;
-    actor->eval();
-
-    double total_return = 0.0;
-
-    for (int episode = 0; episode < episodes; ++episode) {
-        auto observation = reset_from_scenario(env, reset_scenario);
-        double episode_return = 0.0;
-
-        while (true) {
-            const auto obs_tensor = mujoco_rl_training::vector_to_tensor(observation, device, true);
-            const auto mean = actor->forward(obs_tensor);
-            const auto normalized_action = mujoco_rl_training::squash_action(mean);
-            const auto action_command =
-                mujoco_rl_training::scale_action(normalized_action.squeeze(0), env.config().max_torques);
-
-            const auto result = env.step(action_command);
-
-            episode_return += result.reward;
-            observation = result.observation;
-
-            if (result.terminated || result.truncated) {
-                break;
-            }
-        }
-
-        total_return += episode_return;
-    }
-
-    actor->train();
-
-    EvaluationStats stats;
-    stats.mean_return = total_return / static_cast<double>(episodes);
-    return stats;
-}
-
 }  // namespace
 
 int main() {
     constexpr int kObsDim = 6;
     constexpr int kActionDim = 2;
-    constexpr int kEpochs = 300;
+    constexpr int kEpochs = 500;
     constexpr std::size_t kStepsPerEpoch = 4000;
     constexpr int kEpisodesPerEvaluation = 10;
     constexpr double kGamma = 0.99;
@@ -210,7 +93,7 @@ int main() {
     constexpr double kTargetKl = 0.015;
     constexpr int kLogEvery = 5;
     constexpr double kCheckpointImprovementThreshold = 0.0;
-    constexpr int kEarlyStopPatience = 50;
+    constexpr int kEarlyStopPatience = 100;
 
     torch::manual_seed(0);
     const auto device = mujoco_rl_training::default_device();
@@ -218,7 +101,7 @@ int main() {
 
     auto config = make_env_config();
     const auto training_scenarios = make_training_scenarios();
-    const ResetScenario evaluation_scenario{{0.0, 0.0}, 0.05, 0.0};
+    const mujoco_rl_training::ResetSpace evaluation_scenario{{0.0, 0.0}, {0.05, 0.05}, {0.0, 0.0}, {0.0, 0.0}};
     std::mt19937 reset_rng(0);
     mujoco_rl_training::DoublePendulumEnv env(config);
 
@@ -234,8 +117,14 @@ int main() {
     torch::optim::Adam actor_optimizer(actor->parameters(), torch::optim::AdamOptions(0.0003));
     torch::optim::Adam critic_optimizer(critic->parameters(), torch::optim::AdamOptions(0.001));
 
+    auto train_reset = [&](auto& env) {
+        return mujoco_rl_training::reset_from_random_scenario(env, training_scenarios, reset_rng);
+    };
+
+    auto eval_reset = [&](auto& env) { return env.reset(evaluation_scenario); };
+
     apply_final_evaluation_weights(env);
-    auto eval_stats = evaluate_mean_policy(env, actor, device, kEpisodesPerEvaluation, evaluation_scenario);
+    auto eval_stats = mujoco_rl_training::evaluate_mean_policy(env, actor, device, kEpisodesPerEvaluation, eval_reset);
     double best_mean_return = eval_stats.mean_return;
     int epochs_without_improvement = 0;
     mujoco_rl_training::save_double_pendulum_torch_actor_critic_policy(
@@ -249,8 +138,8 @@ int main() {
         log_std =
             torch::full({kActionDim}, std::log(current_std), torch::TensorOptions().dtype(torch::kFloat32)).to(device);
 
-        auto batch = collect_batch(env, actor, critic, log_std, device, kStepsPerEpoch, kRewardScale,
-                                   training_scenarios, reset_rng);
+        auto batch = mujoco_rl_training::collect_ppo_batch(env, actor, critic, log_std, device, kStepsPerEpoch,
+                                                           kRewardScale, train_reset);
         mujoco_rl_training::compute_gae(batch, kGamma, kLambda);
         mujoco_rl_training::normalize_advantages(batch);
         const auto stats =
@@ -258,7 +147,7 @@ int main() {
                                            kPpoTrainIters, kMiniBatchSize, kClipEpsilon, kTargetKl);
 
         apply_final_evaluation_weights(env);
-        eval_stats = evaluate_mean_policy(env, actor, device, kEpisodesPerEvaluation, evaluation_scenario);
+        eval_stats = mujoco_rl_training::evaluate_mean_policy(env, actor, device, kEpisodesPerEvaluation, eval_reset);
         if (eval_stats.mean_return > best_mean_return + kCheckpointImprovementThreshold) {
             best_mean_return = eval_stats.mean_return;
             epochs_without_improvement = 0;

@@ -52,6 +52,11 @@ DoublePendulumEnv::DoublePendulumEnv(const DoublePendulumEnvConfig& config)
     vel_indices_.reserve(config_.joint_names.size());
     control_indices_.reserve(config_.joint_names.size());
 
+    env_spec_.action_dim = 2;
+    env_spec_.observation_dim = 6;
+    env_spec_.action_limit_space.max_limit = {config_.max_torques[0], config_.max_torques[1]};
+    env_spec_.action_limit_space.min_limit = {-config_.max_torques[0], -config_.max_torques[1]};
+
     const auto& sim_joint_state_indices = sim_core_->joint_state_indices_by_name();
     const auto& sim_pos_indices_ = sim_core_->joint_position_indices();
     const auto& sim_vel_indices_ = sim_core_->joint_velocity_indices();
@@ -74,19 +79,24 @@ DoublePendulumEnv::DoublePendulumEnv(const DoublePendulumEnvConfig& config)
 }
 DoublePendulumEnv::~DoublePendulumEnv() = default;
 
+const EnvSpec& DoublePendulumEnv::env_spec() const { return env_spec_; }
+
 std::vector<double> DoublePendulumEnv::reset() {
-    return reset_around(std::vector<double>(config_.joint_names.size(), 0.0), config_.reset_angle_range,
-                        config_.reset_velocity_range);
+    ResetSpace reset_space;
+    reset_space.qpos_centers = std::vector<double>(config_.joint_names.size(), 0.0);
+    reset_space.qpos_ranges = std::vector<double>(config_.joint_names.size(), config_.reset_angle_range);
+    reset_space.qvel_centers = std::vector<double>(config_.joint_names.size(), 0.0);
+    reset_space.qvel_ranges = std::vector<double>(config_.joint_names.size(), config_.reset_velocity_range);
+    return reset(reset_space);
 }
 
-std::vector<double> DoublePendulumEnv::reset_around(const std::vector<double>& angle_centers, double angle_range,
-                                                    double velocity_range) {
-    if (angle_centers.size() != pos_indices_.size()) {
-        throw std::runtime_error("DoublePendulumEnv: reset angle center size must match joint count.");
+std::vector<double> DoublePendulumEnv::reset(const ResetSpace& reset_space) {
+    if (reset_space.qpos_centers.size() != pos_indices_.size() ||
+        reset_space.qpos_ranges.size() != pos_indices_.size() ||
+        reset_space.qvel_centers.size() != vel_indices_.size() ||
+        reset_space.qvel_ranges.size() != vel_indices_.size()) {
+        throw std::runtime_error("DoublePendulumEnv: reset space size must match joint count.");
     }
-
-    std::uniform_real_distribution<double> theta_dist(-angle_range, angle_range);
-    std::uniform_real_distribution<double> theta_dot_dist(-velocity_range, velocity_range);
 
     {
         std::lock_guard<std::recursive_mutex> lock(sim_core_->state_mutex());
@@ -95,8 +105,12 @@ std::vector<double> DoublePendulumEnv::reset_around(const std::vector<double>& a
             sim_core_->set_effort_command(control_indices_[i], 0.0);
         }
         for (size_t i = 0; i < pos_indices_.size(); ++i) {
-            sim_core_->data()->qpos[pos_indices_[i]] = angle_centers[i] + theta_dist(rng_);
-            sim_core_->data()->qvel[vel_indices_[i]] = theta_dot_dist(rng_);
+            std::uniform_real_distribution<double> qpos_dist(reset_space.qpos_centers[i] - reset_space.qpos_ranges[i],
+                                                             reset_space.qpos_centers[i] + reset_space.qpos_ranges[i]);
+            std::uniform_real_distribution<double> qvel_dist(reset_space.qvel_centers[i] - reset_space.qvel_ranges[i],
+                                                             reset_space.qvel_centers[i] + reset_space.qvel_ranges[i]);
+            sim_core_->data()->qpos[pos_indices_[i]] = qpos_dist(rng_);
+            sim_core_->data()->qvel[vel_indices_[i]] = qvel_dist(rng_);
         }
         mj_forward(sim_core_->model(), sim_core_->data());
     }
@@ -145,6 +159,12 @@ void DoublePendulumEnv::set_training_weights(const std::vector<double>& angle_co
     config_.max_torques = max_torques;
     if (!link_angle_cost_weights.empty()) {
         config_.link_angle_cost_weights = link_angle_cost_weights;
+    }
+    env_spec_.action_limit_space.max_limit = config_.max_torques;
+    env_spec_.action_limit_space.min_limit.clear();
+    env_spec_.action_limit_space.min_limit.reserve(config_.max_torques.size());
+    for (const double& max_torque : config_.max_torques) {
+        env_spec_.action_limit_space.min_limit.push_back(-max_torque);
     }
 }
 
