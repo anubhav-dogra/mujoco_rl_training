@@ -4,7 +4,7 @@
 #include <random>
 #include <vector>
 #include <string>
-#include <mujoco_rl_training/EnvTypes.hpp>
+#include <envs/EnvTypes.hpp>
 
 class MujocoSimCore;
 namespace mujoco_rl_training {

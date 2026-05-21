@@ -1,11 +1,12 @@
 #pragma once
 
+#include <envs/EnvTypes.hpp>
+#include <mujoco_rl_training/ActionUtils.hpp>
+#include <mujoco_rl_training/rl/TrajectoryUtils.h>
 #include <mujoco_rl_training/torch/Actor.h>
 #include <mujoco_rl_training/torch/Critic.h>
 #include <mujoco_rl_training/torch/GaussianPolicy.h>
 #include <mujoco_rl_training/torch/TensorUtils.h>
-#include <mujoco_rl_training/rl/TrajectoryUtils.h>
-
 #include <torch/nn/utils/clip_grad.h>
 #include <torch/torch.h>
 
@@ -50,6 +51,103 @@ struct PpoBatch {
 
     std::size_t size() const { return rewards.size(); }
 };
+
+inline double evaluate_critic_value(TorchCritic& critic, const std::vector<double>& observation,
+                                    const torch::Device& device) {
+    torch::NoGradGuard no_grad;
+    const auto obs = vector_to_tensor(observation, device, true);
+    return critic->forward(obs).item<double>();
+}
+
+template <typename Env, typename ResetFn>
+PpoBatch collect_ppo_batch(Env& env, TorchActor& actor, TorchCritic& critic, const torch::Tensor& log_std,
+                           const torch::Device& device, std::size_t steps_per_epoch, double reward_scale,
+                           ResetFn reset_fn) {
+    PpoBatch batch;
+    batch.reserve(steps_per_epoch);
+    auto observation = reset_fn(env);
+    std::vector<double> last_next_observation = observation;
+    bool last_done = false;
+
+    actor->eval();
+    critic->eval();
+
+    while (batch.size() < steps_per_epoch) {
+        torch::NoGradGuard no_grad;
+        const auto observation_tensor = vector_to_tensor(observation, device, true);
+        const auto mean = actor->forward(observation_tensor);
+        const auto raw_action = sample_gaussian_action(mean, log_std).detach();
+        const auto normalized_action = squash_action(raw_action);
+        const torch::Tensor old_log_prob = squashed_gaussian_log_prob(raw_action, mean, log_std);
+        const torch::Tensor value_tensor = critic->forward(observation_tensor);
+        const auto value = value_tensor.item<double>();
+
+        const auto action_command = scale_action_from_action_space(tensor_to_vector(normalized_action.squeeze(0)),
+                                                                   env.env_spec().action_limit_space);
+        const auto result = env.step(action_command);
+        const auto done = result.terminated || result.truncated;
+
+        batch.store(observation, tensor_to_vector(raw_action.squeeze(0)), old_log_prob.item<double>(),
+                    reward_scale * result.reward, value, done);
+
+        last_next_observation = result.observation;
+        last_done = done;
+        observation = result.observation;
+
+        if (done) {
+            observation = reset_fn(env);
+        }
+    }
+
+    batch.bootstrap_value = last_done ? 0.0 : evaluate_critic_value(critic, last_next_observation, device);
+    actor->train();
+    critic->train();
+
+    return batch;
+}
+
+struct EvaluationStats {
+    double mean_return = 0.0;
+};
+
+template <typename Env, typename ResetFn>
+EvaluationStats evaluate_mean_policy(Env& env, TorchActor& actor, const torch::Device& device, int episodes,
+                                     ResetFn reset_fn) {
+    torch::NoGradGuard no_grad;
+    actor->eval();
+
+    double total_return = 0.0;
+
+    for (int episode = 0; episode < episodes; ++episode) {
+        auto observation = reset_fn(env);
+        double episode_return = 0.0;
+
+        while (true) {
+            const auto obs_tensor = vector_to_tensor(observation, device, true);
+            const auto mean = actor->forward(obs_tensor);
+            const auto normalized_action = squash_action(mean);
+            const auto action_command = scale_action_from_action_space(
+                tensor_to_vector(normalized_action.squeeze(0)), env.env_spec().action_limit_space);
+
+            const auto result = env.step(action_command);
+
+            episode_return += result.reward;
+            observation = result.observation;
+
+            if (result.terminated || result.truncated) {
+                break;
+            }
+        }
+
+        total_return += episode_return;
+    }
+
+    actor->train();
+
+    EvaluationStats stats;
+    stats.mean_return = total_return / static_cast<double>(episodes);
+    return stats;
+}
 
 struct PpoUpdateStats {
     double actor_loss = 0.0;

@@ -95,6 +95,7 @@ function(add_torch_example target source)
   target_include_directories(${target} PRIVATE
     ${TORCH_INCLUDE_DIRS}
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/envs/include>
   )
   target_link_libraries(${target}
     "${TORCH_LIBRARIES}"
