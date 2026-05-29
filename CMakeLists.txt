@@ -107,6 +107,7 @@ endfunction()
 add_library(mujoco_rl_training SHARED
   envs/src/PendulumEnv.cpp
   envs/src/DoublePendulumEnv.cpp
+  envs/src/AcrobotEnv.cpp
 )
 target_mujoco_include_dirs(mujoco_rl_training)
 target_link_libraries(mujoco_rl_training
@@ -124,12 +125,14 @@ add_rl_executable(pendulum_reinforce src/pendulum_reinforce.cpp)
 add_rl_executable(pendulum_vpg src/pendulum_vpg.cpp)
 add_rl_executable(double_pendulum_vpg src/double_pendulum_vpg.cpp)
 add_torch_rl_executable(double_pendulum_torch_ppo src/double_pendulum_torch_ppo.cpp)
+add_torch_rl_executable(acrobot_torch_ppo src/acrobot_torch_ppo.cpp)
 
 add_rl_viewer_executable(pendulum_rl_visual_demo src/pendulum_rl_env_visualize.cpp)
 add_rl_viewer_executable(double_pendulum_rl_visual_demo src/double_pendulum_rl_visual_demo.cpp)
 add_rl_viewer_executable(pendulum_policy_rollout src/pendulum_policy_rollout.cpp)
 add_rl_viewer_executable(double_pendulum_policy_rollout src/double_pendulum_policy_rollout.cpp)
 add_torch_rl_viewer_executable(double_pendulum_torch_policy_rollout src/double_pendulum_torch_policy_rollout.cpp)
+add_torch_rl_viewer_executable(acrobot_torch_policy_rollout src/acrobot_torch_policy_rollout.cpp)
 
 set(EXAMPLE_EXECUTABLE_TARGETS)
 add_torch_example(torch_tensor_basics examples/torch_tensor_basics.cpp)
