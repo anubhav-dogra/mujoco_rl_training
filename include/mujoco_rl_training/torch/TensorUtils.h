@@ -9,12 +9,23 @@
 
 namespace mujoco_rl_training {
 
+// =============================================================================
+// Tensor / std::vector bridge helpers.
+//
+// The env layer speaks `std::vector<double>` (CPU, double precision). The
+// network layer speaks `torch::Tensor` (often GPU, float32). These helpers
+// move data across the boundary efficiently, with the necessary `.clone()`
+// where a stack-allocated source vector would otherwise dangle.
+// =============================================================================
+
+// CUDA when available, CPU otherwise. Called once per program to pick where
+// the networks live.
 inline torch::Device default_device() {
     return torch::cuda::is_available() ? torch::Device(torch::kCUDA) : torch::Device(torch::kCPU);
 }
 
-/* converts tensor to vector
- */
+// Tensor (any shape, any device, any dtype) -> flat std::vector<double>.
+// We force to CPU + float64 + contiguous so .item<double>() is safe per cell.
 inline std::vector<double> tensor_to_vector(const torch::Tensor& tensor) {
     const auto cpu_tensor = tensor.detach().to(torch::kCPU).to(torch::kFloat64).contiguous().view({-1});
     std::vector<double> vector;
@@ -25,6 +36,12 @@ inline std::vector<double> tensor_to_vector(const torch::Tensor& tensor) {
     return vector;
 }
 
+// std::vector<double> -> torch::Tensor on `device`, float32.
+//
+// `from_blob` shares storage with the source buffer, so we IMMEDIATELY clone
+// to detach. Without the clone, the tensor would dangle once `flat` goes out
+// of scope. `add_batch_dimension=true` unsqueezes to shape [1, N] for
+// per-sample forward calls.
 inline torch::Tensor vector_to_tensor(const std::vector<double>& values, const torch::Device& device,
                                       bool add_batch_dimension = false) {
     std::vector<float> flat;
@@ -42,10 +59,14 @@ inline torch::Tensor vector_to_tensor(const std::vector<double>& values, const t
     return tensor;
 }
 
+// std::vector<double> -> [N, 1] column tensor, useful for shapes that need to
+// broadcast against [N, action_dim] tensors during PPO loss math.
 inline torch::Tensor vector_to_column_tensor(const std::vector<double>& values, const torch::Device& device) {
     return vector_to_tensor(values, device).unsqueeze(1);
 }
 
+// std::vector<std::vector<double>> -> [rows, cols] tensor on `device`, float32.
+// Rejects ragged inputs (each row must be the same length).
 inline torch::Tensor matrix_to_tensor(const std::vector<std::vector<double>>& values, const torch::Device& device) {
     if (values.empty()) {
         throw std::runtime_error("matrix_to_tensor: cannot convert an empty matrix");
@@ -65,15 +86,14 @@ inline torch::Tensor matrix_to_tensor(const std::vector<std::vector<double>>& va
         }
     }
 
+    // Clone for the same dangling-storage reason as vector_to_tensor.
     return torch::from_blob(flat.data(), {static_cast<int64_t>(rows), static_cast<int64_t>(cols)},
                             torch::TensorOptions().dtype(torch::kFloat32))
         .clone()
         .to(device);
 }
 
-/* Scale Action from Normalized to Actual Action (Tensor)
- * Example: normalized torque to the Actual Torque for Env Physics
- */
+// Convenience: Tensor -> scaled-action vector in one shot (symmetric limits).
 inline std::vector<double> scale_action(const torch::Tensor& normalized_actions,
                                         const std::vector<double>& action_limits) {
     return mujoco_rl_training::scale_action(mujoco_rl_training::tensor_to_vector(normalized_actions), action_limits);

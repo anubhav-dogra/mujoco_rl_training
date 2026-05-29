@@ -1,7 +1,9 @@
 #pragma once
 
+#include <mujoco_rl_training/AcrobotPolicyMetadata.h>
 #include <mujoco_rl_training/DoublePendulumPolicyMetadata.h>
 #include <mujoco_rl_training/PolicyIO.h>
+#include <mujoco_rl_training/rl/RunningMeanStd.h>
 #include <mujoco_rl_training/torch/Actor.h>
 #include <mujoco_rl_training/torch/Critic.h>
 
@@ -16,10 +18,12 @@ struct TorchActorCriticArtifactPaths {
     std::string critic_path;
     std::string log_std_path;
     std::string metadata_path;
+    std::string obs_normalizer_path;  // optional; if empty, normalizer is not saved/loaded
 };
 
 inline void save_torch_actor_critic_artifacts(TorchActor& actor, TorchCritic& critic, const torch::Tensor& log_std,
-                                              const TorchActorCriticArtifactPaths& paths) {
+                                              const TorchActorCriticArtifactPaths& paths,
+                                              const RunningMeanStd* obs_normalizer = nullptr) {
     ensure_artifact_parent_directory(paths.actor_path);
     ensure_artifact_parent_directory(paths.critic_path);
     ensure_artifact_parent_directory(paths.log_std_path);
@@ -27,6 +31,10 @@ inline void save_torch_actor_critic_artifacts(TorchActor& actor, TorchCritic& cr
     torch::save(actor, paths.actor_path);
     torch::save(critic, paths.critic_path);
     torch::save(log_std.to(torch::kCPU), paths.log_std_path);
+
+    if (obs_normalizer && !paths.obs_normalizer_path.empty()) {
+        obs_normalizer->save(paths.obs_normalizer_path);
+    }
 }
 
 inline void append_torch_actor_critic_metadata(const TorchActorCriticArtifactPaths& paths,
@@ -39,11 +47,24 @@ inline void append_torch_actor_critic_metadata(const TorchActorCriticArtifactPat
     metadata << "best_epoch=" << epoch << '\n';
 }
 
+
+inline void save_acrobot_torch_actor_critic_policy(
+    TorchActor& actor, TorchCritic& critic, const torch::Tensor& log_std, const TorchActorCriticArtifactPaths& paths,
+    const AcrobotEnvConfig& config, double best_mean_return, int epoch, int episodes_per_evaluation,
+    const std::string& policy_type, const RunningMeanStd* obs_normalizer = nullptr) {
+    save_torch_actor_critic_artifacts(actor, critic, log_std, paths, obs_normalizer);
+
+    const double mean_std = torch::exp(log_std).mean().item<double>();
+    save_acrobot_policy_metadata(paths.metadata_path, paths.actor_path, config, best_mean_return, epoch,
+                                 episodes_per_evaluation, mean_std);
+    append_torch_actor_critic_metadata(paths, policy_type, epoch);
+}
+
 inline void save_double_pendulum_torch_actor_critic_policy(
     TorchActor& actor, TorchCritic& critic, const torch::Tensor& log_std, const TorchActorCriticArtifactPaths& paths,
     const DoublePendulumEnvConfig& config, double best_mean_return, int epoch, int episodes_per_evaluation,
-    const std::string& policy_type) {
-    save_torch_actor_critic_artifacts(actor, critic, log_std, paths);
+    const std::string& policy_type, const RunningMeanStd* obs_normalizer = nullptr) {
+    save_torch_actor_critic_artifacts(actor, critic, log_std, paths, obs_normalizer);
 
     const double mean_std = torch::exp(log_std).mean().item<double>();
     save_double_pendulum_policy_metadata(paths.metadata_path, paths.actor_path, config, best_mean_return, epoch,

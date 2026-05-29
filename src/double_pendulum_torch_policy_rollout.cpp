@@ -1,6 +1,7 @@
 #include <envs/DoublePendulumEnv.h>
 #include <mujoco_rl_training/DoublePendulumPolicyMetadata.h>
 #include <mujoco_rl_training/VisualDemoUtils.h>
+#include <mujoco_rl_training/rl/RunningMeanStd.h>
 #include <mujoco_rl_training/torch/Actor.h>
 #include <mujoco_rl_training/torch/GaussianPolicy.h>
 #include <mujoco_rl_training/torch/TensorUtils.h>
@@ -16,6 +17,7 @@ namespace {
 constexpr double kPi = 3.14159265358979323846;
 const char* kDefaultActorArtifactPath = "artifacts/double_pendulum_torch_vpg_actor.pt";
 const char* kDefaultMetadataArtifactPath = "artifacts/double_pendulum_torch_vpg.meta.txt";
+const char* kDefaultObsNormalizerArtifactPath = "artifacts/double_pendulum_torch_ppo_obs_normalizer.txt";
 
 mujoco_rl_training::DoublePendulumEnvConfig make_env_config() {
     mujoco_rl_training::DoublePendulumEnvConfig config;
@@ -43,6 +45,7 @@ int main(int argc, char* argv[]) {
 
     const std::string actor_path = (argc > 1) ? argv[1] : kDefaultActorArtifactPath;
     const std::string metadata_path = (argc > 2) ? argv[2] : kDefaultMetadataArtifactPath;
+    const std::string obs_normalizer_path = (argc > 3) ? argv[3] : kDefaultObsNormalizerArtifactPath;
     const auto device = mujoco_rl_training::default_device();
     std::cout << "device: " << device << '\n';
 
@@ -66,6 +69,14 @@ int main(int argc, char* argv[]) {
     actor->to(device);
     actor->eval();
 
+    auto obs_normalizer = mujoco_rl_training::RunningMeanStd::load(obs_normalizer_path);
+    if (obs_normalizer.has_value()) {
+        std::cout << "Loaded obs normalizer from: " << obs_normalizer_path
+                  << " (count=" << obs_normalizer->count() << ")\n";
+    } else {
+        std::cout << "Obs normalizer not found at: " << obs_normalizer_path << " (will pass observations through)\n";
+    }
+
     auto observation = env.reset();
     std::cout << "Loaded Torch actor from: " << actor_path << '\n';
     std::cout << "Initial observation:";
@@ -78,7 +89,9 @@ int main(int argc, char* argv[]) {
         env, observation,
         [&]() {
             torch::NoGradGuard no_grad;
-            const auto obs_tensor = mujoco_rl_training::vector_to_tensor(observation, device, true);
+            const auto normalized_obs =
+                obs_normalizer.has_value() ? obs_normalizer->normalize(observation) : observation;
+            const auto obs_tensor = mujoco_rl_training::vector_to_tensor(normalized_obs, device, true);
             const auto mean = actor->forward(obs_tensor);
             const auto normalized_action = mujoco_rl_training::squash_action(mean);
             return mujoco_rl_training::scale_action(normalized_action.squeeze(0), env.config().max_torques);
